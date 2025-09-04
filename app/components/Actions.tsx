@@ -82,21 +82,45 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       const signer = await getSigner();
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
+      const userAddress = await getUserAddress();
       
       const depositAmount = ethers.parseEther(amount);
       
+      // Debug: Check user's token balance
+      const userBalance = await tokenContract.balanceOf(userAddress);
+      console.log("User balance:", ethers.formatEther(userBalance));
+      console.log("Deposit amount:", ethers.formatEther(depositAmount));
+      
+      if (userBalance < depositAmount) {
+        throw new Error(`Insufficient balance. You have ${ethers.formatEther(userBalance)} cUSD, trying to deposit ${ethers.formatEther(depositAmount)} cUSD`);
+      }
+      
       // First, ensure the pool has allowance to spend user's tokens
-      await ensureAllowance(poolAddress, depositAmount);
+      const currentAllowance = await tokenContract.allowance(userAddress, poolAddress);
+      console.log("Current allowance:", ethers.formatEther(currentAllowance));
+      
+      if (currentAllowance < depositAmount) {
+        setMessage("Setting token allowance...");
+        console.log("Approving tokens...");
+        const approveTx = await tokenContract.approve(poolAddress, depositAmount);
+        await approveTx.wait();
+        console.log("Approval successful");
+        setMessage("✅ Allowance set successfully!");
+      }
       
       setMessage("Depositing tokens...");
+      console.log("Calling deposit function...");
       
-      // Now call deposit
-      const tx = await poolContract.deposit(depositAmount);
+      // Now call deposit with explicit gas limit
+      const tx = await poolContract.deposit(depositAmount, { gasLimit: 500000 });
+      console.log("Deposit transaction sent:", tx.hash);
       await tx.wait();
+      console.log("Deposit transaction confirmed");
       
       setMessage("✅ Deposit successful! Check your position.");
       setAmount("");
     } catch (error: any) {
+      console.error("Deposit error:", error);
       setMessage(`❌ Error: ${error.message}`);
     } finally {
       setLoading(false);
