@@ -19,11 +19,14 @@ contract PrivateLendingPool {
     // using FHE for *;
 
     // State variables
-    ConfidentialUSD public immutable asset;
+    ConfidentialUSD public asset; // Changed from immutable to allow updates
     
     // User positions: deposits and debts (temporary uint256 for compilation)
     mapping(address => uint256) public deposits;
     mapping(address => uint256) public debts;
+    
+    // Access control
+    address public immutable owner;
     
     // Constants
     uint64 constant LTV_BPS = 7000;  // 70% Loan-to-Value ratio
@@ -33,9 +36,28 @@ contract PrivateLendingPool {
     event Deposit(address indexed user, uint256 amount);
     event Borrow(address indexed user, uint256 amount);
     event Repay(address indexed user, uint256 amount);
+    event AssetUpdated(address indexed oldAsset, address indexed newAsset);
 
     constructor(address _asset) {
         asset = ConfidentialUSD(_asset);
+        owner = msg.sender;
+    }
+
+    // Modifier for owner-only functions
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    /**
+     * @dev Update the asset address (owner only)
+     * @param newAsset New asset address
+     */
+    function updateAsset(address newAsset) external onlyOwner {
+        require(newAsset != address(0), "Invalid asset address");
+        address oldAsset = address(asset);
+        asset = ConfidentialUSD(newAsset);
+        emit AssetUpdated(oldAsset, newAsset);
     }
 
     /**

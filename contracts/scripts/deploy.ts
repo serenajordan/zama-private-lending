@@ -7,31 +7,37 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log(`📝 Deploying contracts with account: ${deployer.address}`);
 
-  // Step 1: Deploy ConfidentialUSD token with temporary pool address
-  console.log("🔐 Deploying ConfidentialUSD token (temporary)...");
+  // Step 1: Deploy ConfidentialUSD token with a placeholder pool address
+  console.log("🔐 Deploying ConfidentialUSD token...");
   const ConfidentialUSDFactory = await ethers.getContractFactory("ConfidentialUSD");
-  const tempToken = await ConfidentialUSDFactory.deploy(ethers.ZeroAddress); // Temporary placeholder
-  await tempToken.waitForDeployment();
+  const token = await ConfidentialUSDFactory.deploy(ethers.ZeroAddress); // We'll update this later
+  await token.waitForDeployment();
   
-  const tempTokenAddress = await tempToken.getAddress();
-  console.log(`✅ Temporary ConfidentialUSD deployed to: ${tempTokenAddress}`);
+  const tokenAddress = await token.getAddress();
+  console.log(`✅ ConfidentialUSD deployed to: ${tokenAddress}`);
 
-  // Step 2: Deploy PrivateLendingPool with the temporary token address
+  // Step 2: Deploy PrivateLendingPool with the token address
   console.log("🏦 Deploying PrivateLendingPool...");
   const PrivateLendingPoolFactory = await ethers.getContractFactory("PrivateLendingPool");
-  const privateLendingPool = await PrivateLendingPoolFactory.deploy(tempTokenAddress);
+  const privateLendingPool = await PrivateLendingPoolFactory.deploy(tokenAddress);
   await privateLendingPool.waitForDeployment();
   
   const poolAddress = await privateLendingPool.getAddress();
   console.log(`✅ PrivateLendingPool deployed to: ${poolAddress}`);
 
-  // Step 3: Deploy the final ConfidentialUSD token with the correct pool address
-  console.log("🔄 Deploying final ConfidentialUSD token...");
+  // Step 3: Deploy a new token with the correct pool address
+  console.log("🔄 Deploying final token with correct pool address...");
   const finalToken = await ConfidentialUSDFactory.deploy(poolAddress);
   await finalToken.waitForDeployment();
   
   const finalTokenAddress = await finalToken.getAddress();
   console.log(`✅ Final ConfidentialUSD deployed to: ${finalTokenAddress}`);
+
+  // Step 4: Update the pool's asset to point to the final token
+  console.log("🔧 Updating pool's asset reference...");
+  const updateTx = await privateLendingPool.updateAsset(finalTokenAddress);
+  await updateTx.wait();
+  console.log(`✅ Pool asset updated to: ${finalTokenAddress}`);
 
   // Verify deployment
   console.log("\n📋 Deployment Summary:");
