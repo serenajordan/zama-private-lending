@@ -5,14 +5,14 @@ import { ethers } from "ethers";
 import { userDecrypt } from "../lib/relayer";
 import { getSigner, getUserAddress, isMetaMaskConnected } from "../lib/ethers";
 
-// Contract ABIs
+// Contract ABIs (simplified for demo - using standard uint256 for now)
 const TOKEN_ABI = [
-  "function balanceOf(address account) external view returns (euint64)"
+  "function balanceOf(address account) external view returns (uint256)"
 ];
 
 const POOL_ABI = [
-  "function viewMyPosition() external view returns (euint64, euint64)",
-  "function getHealthFactor(address user) external view returns (ebool)"
+  "function viewMyPosition() external view returns (uint256 deposit, uint256 debt)",
+  "function getHealthFactor(address user) external view returns (bool)"
 ];
 
 interface DashboardProps {
@@ -47,25 +47,20 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
       const signer = await getSigner();
       const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+      const userAddress = await getUserAddress();
       
-      // Get encrypted position data
-      const [depositHandle, debtHandle] = await poolContract.viewMyPosition();
-      const balanceHandle = await tokenContract.balanceOf(await getUserAddress());
+      // Get position data directly (no encryption for now)
+      const [deposit, debt] = await poolContract.viewMyPosition();
+      const balance = await tokenContract.balanceOf(userAddress);
       
       // Get health factor
-      const healthFactorHandle = await poolContract.getHealthFactor(await getUserAddress());
-      
-      // Decrypt all handles
-      const [deposit, debt, balance, healthFactor] = await userDecrypt(
-        [depositHandle, debtHandle, balanceHandle, healthFactorHandle],
-        poolAddress
-      );
+      const healthFactor = await poolContract.getHealthFactor(userAddress);
       
       setPosition({
         deposit,
         debt,
         balance,
-        healthFactor: healthFactor === 1n
+        healthFactor
       });
       
     } catch (error: any) {
@@ -125,7 +120,7 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
           <div className="bg-blue-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold text-blue-900 mb-2">💰 Token Balance</h3>
             <div className="text-2xl font-bold text-blue-700">
-              {Number(position.balance).toLocaleString()} cUSD
+              {ethers.formatEther(position.balance)} cUSD
             </div>
           </div>
 
@@ -134,14 +129,14 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
             <div className="bg-green-50 p-4 rounded-lg">
               <h3 className="text-lg font-semibold text-green-900 mb-2">📈 Total Deposits</h3>
               <div className="text-2xl font-bold text-green-700">
-                {Number(position.deposit).toLocaleString()} cUSD
+                {ethers.formatEther(position.deposit)} cUSD
               </div>
             </div>
             
             <div className="bg-red-50 p-4 rounded-lg">
               <h3 className="text-lg font-semibold text-red-900 mb-2">💳 Total Debt</h3>
               <div className="text-2xl font-bold text-red-700">
-                {Number(position.debt).toLocaleString()} cUSD
+                {ethers.formatEther(position.debt)} cUSD
               </div>
             </div>
           </div>
@@ -177,7 +172,7 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
               <div className="flex justify-between">
                 <span>Current LTV:</span>
                 <span className="font-semibold">
-                  {position.deposit > 0 
+                  {position.deposit > 0n 
                     ? `${Math.round(Number(position.debt) / Number(position.deposit) * 100)}%`
                     : '0%'
                   }
