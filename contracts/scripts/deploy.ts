@@ -1,5 +1,4 @@
 import { ethers } from "hardhat";
-import { ConfidentialUSD, PrivateLendingPool } from "../typechain-types";
 
 async function main() {
   console.log("🚀 Deploying Zama Private Lending Protocol...");
@@ -8,36 +7,31 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log(`📝 Deploying contracts with account: ${deployer.address}`);
 
-  // Deploy ConfidentialUSD token first
-  console.log("🔐 Deploying ConfidentialUSD token...");
+  // Step 1: Deploy ConfidentialUSD token with temporary pool address
+  console.log("🔐 Deploying ConfidentialUSD token (temporary)...");
   const ConfidentialUSDFactory = await ethers.getContractFactory("ConfidentialUSD");
-  const confidentialUSD = await ConfidentialUSDFactory.deploy(ethers.ZeroAddress); // Temporary placeholder for pool
-  await confidentialUSD.waitForDeployment();
+  const tempToken = await ConfidentialUSDFactory.deploy(ethers.ZeroAddress); // Temporary placeholder
+  await tempToken.waitForDeployment();
   
-  const tokenAddress = await confidentialUSD.getAddress();
-  console.log(`✅ ConfidentialUSD deployed to: ${tokenAddress}`);
+  const tempTokenAddress = await tempToken.getAddress();
+  console.log(`✅ Temporary ConfidentialUSD deployed to: ${tempTokenAddress}`);
 
-  // Deploy PrivateLendingPool with the correct token address
+  // Step 2: Deploy PrivateLendingPool with the temporary token address
   console.log("🏦 Deploying PrivateLendingPool...");
   const PrivateLendingPoolFactory = await ethers.getContractFactory("PrivateLendingPool");
-  const privateLendingPool = await PrivateLendingPoolFactory.deploy(tokenAddress);
+  const privateLendingPool = await PrivateLendingPoolFactory.deploy(tempTokenAddress);
   await privateLendingPool.waitForDeployment();
   
   const poolAddress = await privateLendingPool.getAddress();
   console.log(`✅ PrivateLendingPool deployed to: ${poolAddress}`);
 
-  // Update the token's pool address
-  console.log("🔗 Updating token's pool address...");
-  // Note: We need to redeploy the token with the correct pool address
-  // For now, we'll use a different approach - deploy token again with correct pool address
+  // Step 3: Deploy the final ConfidentialUSD token with the correct pool address
+  console.log("🔄 Deploying final ConfidentialUSD token...");
+  const finalToken = await ConfidentialUSDFactory.deploy(poolAddress);
+  await finalToken.waitForDeployment();
   
-  console.log("🔄 Redeploying token with correct pool address...");
-  const ConfidentialUSDFactory2 = await ethers.getContractFactory("ConfidentialUSD");
-  const confidentialUSD2 = await ConfidentialUSDFactory2.deploy(poolAddress);
-  await confidentialUSD2.waitForDeployment();
-  
-  const finalTokenAddress = await confidentialUSD2.getAddress();
-  console.log(`✅ ConfidentialUSD redeployed to: ${finalTokenAddress}`);
+  const finalTokenAddress = await finalToken.getAddress();
+  console.log(`✅ Final ConfidentialUSD deployed to: ${finalTokenAddress}`);
 
   // Verify deployment
   console.log("\n📋 Deployment Summary:");
