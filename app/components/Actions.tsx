@@ -15,6 +15,7 @@ const TOKEN_ABI = [
 ];
 
 const POOL_ABI = [
+  "function asset() external view returns (address)",
   "function deposit(uint256 amount) external",
   "function borrow(uint256 amount) external",
   "function repay(uint256 amount) external",
@@ -111,6 +112,16 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       setMessage("Depositing tokens...");
       console.log("Calling deposit function...");
       
+      // Check pool contract state
+      try {
+        const poolAsset = await poolContract.asset();
+        console.log("Pool asset address:", poolAsset);
+        console.log("Pool asset matches token:", poolAsset.toLowerCase() === tokenAddress.toLowerCase());
+        console.log("Expected token address:", tokenAddress);
+      } catch (error) {
+        console.error("Error checking pool asset:", error);
+      }
+      
       // Now call deposit with explicit gas limit
       const tx = await poolContract.deposit(depositAmount, { gasLimit: 500000 });
       console.log("Deposit transaction sent:", tx.hash);
@@ -121,6 +132,18 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       setAmount("");
     } catch (error: any) {
       console.error("Deposit error:", error);
+      
+      // More detailed error information
+      if (error.receipt) {
+        console.error("Transaction receipt:", error.receipt);
+        console.error("Transaction status:", error.receipt.status);
+        console.error("Gas used:", error.receipt.gasUsed?.toString());
+      }
+      
+      if (error.transaction) {
+        console.error("Transaction details:", error.transaction);
+      }
+      
       setMessage(`❌ Error: ${error.message}`);
     } finally {
       setLoading(false);
@@ -228,6 +251,25 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
           >
             {loading ? "Getting..." : "Get Tokens"}
+          </button>
+        </div>
+        <div className="mt-2">
+          <button
+            onClick={async () => {
+              try {
+                const signer = await getSigner();
+                const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+                const userAddress = await getUserAddress();
+                const balance = await tokenContract.balanceOf(userAddress);
+                console.log("Current balance:", ethers.formatEther(balance));
+                setMessage(`Current balance: ${ethers.formatEther(balance)} cUSD`);
+              } catch (error) {
+                console.error("Balance check error:", error);
+              }
+            }}
+            className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600"
+          >
+            Check Balance
           </button>
         </div>
       </div>
