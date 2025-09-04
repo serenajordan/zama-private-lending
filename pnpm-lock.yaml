@@ -64,12 +64,18 @@ importers:
   contracts:
     dependencies:
       '@fhevm/solidity':
-        specifier: ^0.8.0
+        specifier: 0.8.0
         version: 0.8.0
+      '@zama-fhe/oracle-solidity':
+        specifier: 0.0.4-0
+        version: 0.0.4-0(@openzeppelin/contracts@5.4.0)
     devDependencies:
       '@fhevm/hardhat-plugin':
-        specifier: ^0.0.1-6
-        version: 0.0.1-6(@fhevm/mock-utils@0.0.1-6(@zama-fhe/relayer-sdk@0.2.0-6)(ethers@6.15.0)(typescript@5.9.2))(@fhevm/solidity@0.8.0)(@nomicfoundation/hardhat-ethers@3.1.0(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2)))(@zama-fhe/oracle-solidity@0.1.0(@openzeppelin/contracts@5.4.0))(@zama-fhe/relayer-sdk@0.2.0-6)(encrypted-types@0.0.4)(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2))
+        specifier: 0.0.1-6
+        version: 0.0.1-6(@fhevm/mock-utils@0.0.1-6(@zama-fhe/relayer-sdk@0.2.0-6)(ethers@6.15.0)(typescript@5.9.2))(@fhevm/solidity@0.8.0)(@nomicfoundation/hardhat-ethers@3.1.0(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2)))(@zama-fhe/oracle-solidity@0.0.4-0(@openzeppelin/contracts@5.4.0))(@zama-fhe/relayer-sdk@0.2.0-6)(encrypted-types@0.0.4)(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2))
+      '@fhevm/mock-utils':
+        specifier: 0.0.1-6
+        version: 0.0.1-6(@zama-fhe/relayer-sdk@0.2.0-6)(ethers@6.15.0)(typescript@5.9.2)
       '@nomicfoundation/hardhat-ethers':
         specifier: ^3.0.0
         version: 3.1.0(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2))
@@ -696,8 +702,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@zama-fhe/oracle-solidity@0.1.0':
-    resolution: {integrity: sha512-phRego2FW7SWgneQOES/iQ99c97ZCb+KZk5m+lT474dSNrsgEDh96W9T1+Owhc9C6VKtCpMLM43dHXwKHDIw6g==}
+  '@zama-fhe/oracle-solidity@0.0.4-0':
+    resolution: {integrity: sha512-0Zd0suetfA5Yad/IDzP8ZGhaJgAC+70I0q9MUjjg+JrEQwRlmySDx6T6SNCCSKevDUL5Eelnu3el5mTPqK3sLw==}
 
   '@zama-fhe/relayer-sdk@0.2.0-6':
     resolution: {integrity: sha512-HFHa7QfbV6iNQU+uQHzixVSYdbvZcdA5oEFcHvpoEjgGnjru7uQT+enLVUK8r1tOHtK5MMWD/LIJxjlrnYYcHg==}
@@ -2847,13 +2853,13 @@ snapshots:
       solidity-comments-darwin-arm64: 0.1.1
       solidity-comments-linux-x64-gnu: 0.1.1
 
-  '@fhevm/hardhat-plugin@0.0.1-6(@fhevm/mock-utils@0.0.1-6(@zama-fhe/relayer-sdk@0.2.0-6)(ethers@6.15.0)(typescript@5.9.2))(@fhevm/solidity@0.8.0)(@nomicfoundation/hardhat-ethers@3.1.0(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2)))(@zama-fhe/oracle-solidity@0.1.0(@openzeppelin/contracts@5.4.0))(@zama-fhe/relayer-sdk@0.2.0-6)(encrypted-types@0.0.4)(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2))':
+  '@fhevm/hardhat-plugin@0.0.1-6(@fhevm/mock-utils@0.0.1-6(@zama-fhe/relayer-sdk@0.2.0-6)(ethers@6.15.0)(typescript@5.9.2))(@fhevm/solidity@0.8.0)(@nomicfoundation/hardhat-ethers@3.1.0(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2)))(@zama-fhe/oracle-solidity@0.0.4-0(@openzeppelin/contracts@5.4.0))(@zama-fhe/relayer-sdk@0.2.0-6)(encrypted-types@0.0.4)(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2))':
     dependencies:
       '@fhevm/core-contracts': 0.7.0-12
       '@fhevm/mock-utils': 0.0.1-6(@zama-fhe/relayer-sdk@0.2.0-6)(ethers@6.15.0)(typescript@5.9.2)
       '@fhevm/solidity': 0.8.0
       '@nomicfoundation/hardhat-ethers': 3.1.0(ethers@6.15.0)(hardhat@2.26.3(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))(typescript@5.9.2))
-      '@zama-fhe/oracle-solidity': 0.1.0(@openzeppelin/contracts@5.4.0)
+      '@zama-fhe/oracle-solidity': 0.0.4-0(@openzeppelin/contracts@5.4.0)
       '@zama-fhe/relayer-sdk': 0.2.0-6
       debug: 4.4.1(supports-color@8.1.1)
       dotenv: 16.6.1
@@ -3305,7 +3311,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@zama-fhe/oracle-solidity@0.1.0(@openzeppelin/contracts@5.4.0)':
+  '@zama-fhe/oracle-solidity@0.0.4-0(@openzeppelin/contracts@5.4.0)':
     dependencies:
       '@openzeppelin/contracts-upgradeable': 5.4.0(@openzeppelin/contracts@5.4.0)
     transitivePeerDependencies:
@@ -3874,7 +3880,7 @@ snapshots:
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(eslint@8.57.1))(eslint@8.57.1)
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.2))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1)
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.2))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@8.57.1)
       eslint-plugin-react: 7.37.5(eslint@8.57.1)
       eslint-plugin-react-hooks: 5.0.0-canary-7118f5dd7-20230705(eslint@8.57.1)
@@ -3904,7 +3910,7 @@ snapshots:
       tinyglobby: 0.2.14
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.2))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1)
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.2))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -3919,7 +3925,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.2))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@6.21.0(eslint@8.57.1)(typescript@5.9.2))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@8.57.1))(eslint@8.57.1))(eslint@8.57.1):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9

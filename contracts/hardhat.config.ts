@@ -1,6 +1,6 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-ethers";
-import "@fhevm/hardhat-plugin";
+// import "@fhevm/hardhat-plugin";
 import "dotenv/config";
 
 const config: HardhatUserConfig = {

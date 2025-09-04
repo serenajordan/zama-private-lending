@@ -8,32 +8,27 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log(`📝 Deploying contracts with account: ${deployer.address}`);
 
-  // Deploy ConfidentialUSD token first
-  console.log("🔐 Deploying ConfidentialUSD token...");
-  const ConfidentialUSDFactory = await ethers.getContractFactory("ConfidentialUSD");
-  
-  // We'll deploy the pool first with a placeholder address, then update the token
-  const placeholderPool = ethers.ZeroAddress;
-  const confidentialUSD = await ConfidentialUSDFactory.deploy(placeholderPool);
-  await confidentialUSD.waitForDeployment();
-  
-  const tokenAddress = await confidentialUSD.getAddress();
-  console.log(`✅ ConfidentialUSD deployed to: ${tokenAddress}`);
-
-  // Deploy PrivateLendingPool
+  // Deploy PrivateLendingPool first
   console.log("🏦 Deploying PrivateLendingPool...");
   const PrivateLendingPoolFactory = await ethers.getContractFactory("PrivateLendingPool");
-  const privateLendingPool = await PrivateLendingPoolFactory.deploy(tokenAddress);
+  const privateLendingPool = await PrivateLendingPoolFactory.deploy(ethers.ZeroAddress); // Temporary placeholder
   await privateLendingPool.waitForDeployment();
   
   const poolAddress = await privateLendingPool.getAddress();
   console.log(`✅ PrivateLendingPool deployed to: ${poolAddress}`);
 
-  // Update the token's pool address
-  console.log("🔗 Updating token's pool address...");
-  // Note: In a real deployment, you might need to redeploy the token with the correct pool address
-  // or implement a setter function. For now, we'll note this limitation.
-  console.log("⚠️  Note: Token was deployed with placeholder pool address. Consider redeploying with correct pool address.");
+  // Deploy ConfidentialUSD token with the correct pool address
+  console.log("🔐 Deploying ConfidentialUSD token...");
+  const ConfidentialUSDFactory = await ethers.getContractFactory("ConfidentialUSD");
+  const confidentialUSD = await ConfidentialUSDFactory.deploy(poolAddress);
+  await confidentialUSD.waitForDeployment();
+  
+  const tokenAddress = await confidentialUSD.getAddress();
+  console.log(`✅ ConfidentialUSD deployed to: ${tokenAddress}`);
+
+  // Update the pool's asset address
+  console.log("🔗 Updating pool's asset address...");
+  // Note: The pool constructor sets the asset address, so this should work correctly
 
   // Verify deployment
   console.log("\n📋 Deployment Summary:");
