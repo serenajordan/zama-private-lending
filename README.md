@@ -137,3 +137,7 @@ BSD-3-Clause-Clear
 - [FHEVM Solidity Library](https://docs.zama.ai/fhevm/solidity/)
 - [Relayer SDK](https://docs.zama.ai/fhevm/relayer/)
 - [Sepolia Testnet](https://sepolia.dev/)
+
+### Faucet
+Mint demo cUSD to interact with the pool.
+
