@@ -109,6 +109,7 @@ All operations use encrypted inputs and maintain privacy throughout the process.
 │ - Dashboard     │◄──►│ - Input Registry │◄──►│ - Confidential  │
 │ - Actions       │    │ - User Decrypt   │    │   USD Token     │
 │ - UI Components │    │ - Proof Gen      │    │ - Lending Pool  │
+- LTV is enforced in encrypted domain using FHE.select (no data-dependent revert).
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
