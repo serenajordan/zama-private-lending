@@ -9,7 +9,9 @@ import { getSigner, getUserAddress } from "../lib/ethers";
 const TOKEN_ABI = [
   "function faucet(uint256 amount) external",
   "function transfer(address to, uint256 amount) external",
-  "function balanceOf(address account) external view returns (uint256)"
+  "function balanceOf(address account) external view returns (uint256)",
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)"
 ];
 
 const POOL_ABI = [
@@ -29,6 +31,22 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
   const [recipient, setRecipient] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  // Helper function to check and set allowance
+  const ensureAllowance = async (spender: string, amount: bigint) => {
+    const signer = await getSigner();
+    const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+    const userAddress = await getUserAddress();
+    
+    const currentAllowance = await tokenContract.allowance(userAddress, spender);
+    
+    if (currentAllowance < amount) {
+      setMessage("Setting token allowance...");
+      const approveTx = await tokenContract.approve(spender, amount);
+      await approveTx.wait();
+      setMessage("✅ Allowance set successfully!");
+    }
+  };
 
   const handleFaucet = async () => {
     if (!amount) return;
@@ -59,14 +77,21 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
     
     try {
       setLoading(true);
-      setMessage("Depositing tokens...");
+      setMessage("Setting token allowance...");
       
       const signer = await getSigner();
+      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
       
-      // For now, call deposit directly with the amount
-      // In production, this would use encrypted values
-      const tx = await poolContract.deposit(ethers.parseEther(amount));
+      const depositAmount = ethers.parseEther(amount);
+      
+      // First, ensure the pool has allowance to spend user's tokens
+      await ensureAllowance(poolAddress, depositAmount);
+      
+      setMessage("Depositing tokens...");
+      
+      // Now call deposit
+      const tx = await poolContract.deposit(depositAmount);
       await tx.wait();
       
       setMessage("✅ Deposit successful! Check your position.");
@@ -107,14 +132,21 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
     
     try {
       setLoading(true);
-      setMessage("Repaying debt...");
+      setMessage("Setting token allowance...");
       
       const signer = await getSigner();
+      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
       
-      // For now, call repay directly with the amount
-      // In production, this would use encrypted values
-      const tx = await poolContract.repay(ethers.parseEther(amount));
+      const repayAmount = ethers.parseEther(amount);
+      
+      // First, ensure the pool has allowance to spend user's tokens
+      await ensureAllowance(poolAddress, repayAmount);
+      
+      setMessage("Repaying debt...");
+      
+      // Now call repay
+      const tx = await poolContract.repay(repayAmount);
       await tx.wait();
       
       setMessage("✅ Repay successful! Check your position.");

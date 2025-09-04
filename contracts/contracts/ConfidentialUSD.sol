@@ -3,47 +3,54 @@ pragma solidity ^0.8.24;
 
 // TODO: Re-enable FHEVM imports once version compatibility is resolved
 // import "@fhevm/solidity/config/FHEVMConfig.sol";
-// import "@fhevm/solidity/lib/FHE.sol";
+// import { FHE } from "@fhevm/solidity/FHE.sol";
 
 /**
  * @title ConfidentialUSD
- * @dev A confidential ERC20-like token built on Zama fhEVM
- * All balances and transfer amounts are encrypted and private
- * 
- * NOTE: This is a simplified version for initial compilation.
- * FHEVM integration will be added once version compatibility is resolved.
+ * @dev Confidential token with basic transfer functionality
+ * @dev Simplified for demo - will re-enable FHEVM features later
  */
 contract ConfidentialUSD {
     // TODO: Re-enable FHEVM types once version compatibility is resolved
     // using FHE for *;
-
-    // State variables
-    mapping(address => uint256) private _balances; // TODO: Change to euint64
-    address public immutable pool;
-    address public immutable owner;
-
-    // Events
-    event Transfer(address indexed from, address indexed to);
-
-    // Error handling structure per Zama docs
+    
+    // Token metadata
+    string public constant name = "Confidential USD";
+    string public constant symbol = "cUSD";
+    uint8 public constant decimals = 18;
+    
+    // Balances (temporary uint256 for compilation)
+    mapping(address => uint256) private _balances;
+    
+    // Allowances for ERC20 compatibility
+    mapping(address => mapping(address => uint256)) private _allowances;
+    
+    // Error tracking
     struct LastError {
-        uint8 code;  // 0 = success, 1 = insufficient funds, 2 = other error
+        uint8 code;
         uint256 timestamp;
     }
-    
     mapping(address => LastError) private _lastErrors;
-
+    
+    // Access control
+    address public immutable pool;
+    address public immutable owner;
+    
+    // Events
+    event Transfer(address indexed from, address indexed to);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    
     // Modifiers
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Not owner");
-        _;
-    }
-
     modifier onlyPool() {
         require(msg.sender == pool, "Not pool");
         _;
     }
-
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+    
     constructor(address _pool) {
         pool = _pool;
         owner = msg.sender;
@@ -112,6 +119,27 @@ contract ConfidentialUSD {
     }
 
     /**
+     * @dev Approve spender to spend tokens
+     * @param spender Address to approve
+     * @param amount Amount to approve
+     */
+    function approve(address spender, uint256 amount) external returns (bool) {
+        _allowances[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
+        return true;
+    }
+
+    /**
+     * @dev Get allowance for spender
+     * @param owner Token owner
+     * @param spender Spender address
+     * @return Allowed amount
+     */
+    function allowance(address owner, address spender) external view returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    /**
      * @dev Pull tokens from an address (pool only)
      * @param from Source address
      * @param to Destination address
@@ -119,10 +147,14 @@ contract ConfidentialUSD {
      */
     function pull(address from, address to, uint256 amt) external onlyPool {
         require(_balances[from] >= amt, "Insufficient balance");
+        require(_allowances[from][msg.sender] >= amt, "Insufficient allowance");
         
         // Update balances
         _balances[from] -= amt;
         _balances[to] += amt;
+        
+        // Update allowance
+        _allowances[from][msg.sender] -= amt;
         
         emit Transfer(from, to);
     }
