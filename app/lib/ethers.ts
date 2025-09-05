@@ -1,15 +1,5 @@
 import { ethers } from "ethers";
 
-// Extend Window interface to include ethereum
-declare global {
-  interface Window {
-    ethereum?: {
-      isMetaMask?: boolean;
-      request: (args: { method: string; params?: any[] }) => Promise<any>;
-    };
-  }
-}
-
 /**
  * Get ethers provider for Sepolia testnet
  * @returns BrowserProvider instance

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import { userDecrypt } from "../lib/relayer";
-import { getSigner, getUserAddress, isMetaMaskConnected } from "../lib/ethers";
+import { userDecryptPosition } from "../lib/relayer";
+import { getSigner, getUserAddress, isMetaMaskConnected, getProvider } from "../lib/ethers";
 
 // Contract ABIs (simplified for demo - using standard uint256 for now)
 const TOKEN_ABI = [
@@ -11,7 +11,7 @@ const TOKEN_ABI = [
 ];
 
 const POOL_ABI = [
-  "function viewMyPosition() external view returns (uint256 deposit, uint256 debt)",
+  "function viewMyPosition() external view returns (string deposit, string debt)",
   "function getHealthFactor(address user) external view returns (bool)"
 ];
 
@@ -25,6 +25,7 @@ interface Position {
   debt: bigint;
   balance: bigint;
   healthFactor: boolean;
+  ltv: number;
 }
 
 export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps) {
@@ -32,10 +33,48 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
+  const [networkName, setNetworkName] = useState<string>("");
+  const [copiedAddress, setCopiedAddress] = useState<string>("");
 
   useEffect(() => {
     setConnected(isMetaMaskConnected());
+    getNetworkInfo();
   }, []);
+
+  const getNetworkInfo = async () => {
+    try {
+      const provider = await getProvider();
+      const network = await provider.getNetwork();
+      setNetworkName(network.name || `Chain ${network.chainId}`);
+    } catch (error) {
+      setNetworkName("Unknown");
+    }
+  };
+
+  const formatWithDecimals = (value: bigint, decimals: number = 6): string => {
+    const divisor = BigInt(10 ** decimals);
+    const wholePart = value / divisor;
+    const fractionalPart = value % divisor;
+    
+    if (fractionalPart === BigInt(0)) {
+      return wholePart.toString();
+    }
+    
+    const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+    const trimmedFractional = fractionalStr.replace(/0+$/, '');
+    
+    return trimmedFractional ? `${wholePart}.${trimmedFractional}` : wholePart.toString();
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAddress(label);
+      setTimeout(() => setCopiedAddress(""), 2000);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+    }
+  };
 
   const refreshPosition = async () => {
     if (!connected) return;
@@ -49,18 +88,37 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       const userAddress = await getUserAddress();
       
-      // Get position data directly (no encryption for now)
-      const [deposit, debt] = await poolContract.viewMyPosition();
+      // Get ciphertext handles from pool
+      const [depositHandle, debtHandle] = await poolContract.viewMyPosition();
+      
+      // Decrypt the handles to get plaintext values
+      const decryptedData = await userDecryptPosition(
+        [depositHandle, debtHandle],
+        poolAddress,
+        signer
+      );
+      
+      // Extract decrypted values (assuming keys are 'position_0' and 'position_1')
+      const deposit = decryptedData.position_0 || BigInt(0);
+      const debt = decryptedData.position_1 || BigInt(0);
+      
+      // Get token balance (still public)
       const balance = await tokenContract.balanceOf(userAddress);
       
       // Get health factor
       const healthFactor = await poolContract.getHealthFactor(userAddress);
       
+      // Calculate LTV client-side
+      const ltv = deposit > BigInt(0) 
+        ? Number(debt) / Number(deposit) * 100 
+        : 0;
+      
       setPosition({
         deposit,
         debt,
         balance,
-        healthFactor
+        healthFactor,
+        ltv
       });
       
     } catch (error: any) {
@@ -94,7 +152,23 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">📊 Dashboard</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold text-gray-900">📊 Dashboard</h2>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">
+              🌐 {networkName}
+            </span>
+            <div className="relative group">
+              <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full cursor-help">
+                ⚠️ Demo
+              </span>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                This is a demo version. Real FHEVM integration coming soon.
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+              </div>
+            </div>
+          </div>
+        </div>
         <button
           onClick={refreshPosition}
           disabled={loading}
@@ -102,6 +176,37 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
         >
           {loading ? "Loading..." : "🔄 Refresh"}
         </button>
+      </div>
+
+      {/* Contract Addresses */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">📋 Contract Addresses</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600 w-20">Token:</span>
+            <code className="flex-1 text-xs bg-white px-2 py-1 rounded border font-mono">
+              {tokenAddress}
+            </code>
+            <button
+              onClick={() => copyToClipboard(tokenAddress, "Token")}
+              className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+            >
+              {copiedAddress === "Token" ? "✓" : "📋"}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600 w-20">Pool:</span>
+            <code className="flex-1 text-xs bg-white px-2 py-1 rounded border font-mono">
+              {poolAddress}
+            </code>
+            <button
+              onClick={() => copyToClipboard(poolAddress, "Pool")}
+              className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+            >
+              {copiedAddress === "Pool" ? "✓" : "📋"}
+            </button>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -129,14 +234,20 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
             <div className="bg-green-50 p-4 rounded-lg">
               <h3 className="text-lg font-semibold text-green-900 mb-2">📈 Total Deposits</h3>
               <div className="text-2xl font-bold text-green-700">
-                {ethers.formatEther(position.deposit)} cUSD
+                {formatWithDecimals(position.deposit, 6)} cUSD
+              </div>
+              <div className="text-xs text-green-600 mt-1">
+                🔒 Encrypted on-chain
               </div>
             </div>
             
             <div className="bg-red-50 p-4 rounded-lg">
               <h3 className="text-lg font-semibold text-red-900 mb-2">💳 Total Debt</h3>
               <div className="text-2xl font-bold text-red-700">
-                {ethers.formatEther(position.debt)} cUSD
+                {formatWithDecimals(position.debt, 6)} cUSD
+              </div>
+              <div className="text-xs text-red-600 mt-1">
+                🔒 Encrypted on-chain
               </div>
             </div>
           </div>
@@ -171,12 +282,15 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
               </div>
               <div className="flex justify-between">
                 <span>Current LTV:</span>
-                <span className="font-semibold">
-                  {position.deposit > BigInt(0) 
-                    ? `${Math.round(Number(position.debt) / Number(position.deposit) * 100)}%`
-                    : '0%'
-                  }
+                <span className={`font-semibold ${
+                  position.ltv > 70 ? 'text-red-600' : 
+                  position.ltv > 50 ? 'text-yellow-600' : 'text-green-600'
+                }`}>
+                  {position.ltv.toFixed(2)}%
                 </span>
+              </div>
+              <div className="text-sm text-gray-600">
+                💻 Calculated client-side from decrypted values
               </div>
               <div className="text-sm text-gray-600">
                 You can borrow up to 70% of your deposited collateral value
