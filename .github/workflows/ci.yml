@@ -41,24 +41,24 @@ jobs:
 
       - name: Install package deps
         run: |
-          pnpm -C contracts install
-          pnpm -C app install
+          pnpm --filter contracts install
+          pnpm --filter app install
 
       - name: Verify installation
         run: |
           pnpm list --depth=0
-          pnpm -C contracts list --depth=0
-          pnpm -C app list --depth=0
+          pnpm --filter contracts list --depth=0
+          pnpm --filter app list --depth=0
 
       - name: Compile contracts
-        run: pnpm -C contracts hardhat compile
+        run: pnpm --filter contracts hardhat compile
 
       - name: Run unit tests (contracts)
         env:
           CI: true
         run: |
           echo "Running contract tests..."
-          pnpm -C contracts test
+          pnpm --filter contracts test
           echo "Contract tests completed successfully"
 
       - name: Build frontend
@@ -67,5 +67,5 @@ jobs:
           NEXT_PUBLIC_POOL:  0x0000000000000000000000000000000000000000
         run: |
           echo "Building frontend..."
-          pnpm -C app build
+          pnpm --filter app build
           echo "Frontend build completed successfully"
