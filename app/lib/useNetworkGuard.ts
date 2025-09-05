@@ -29,7 +29,7 @@ export function useNetworkGuard(): NetworkState {
     }
 
     try {
-      const chainId = await window.ethereum.request({ method: "eth_chainId" });
+      const chainId = await window.ethereum.request({ method: "eth_chainId" }) as string;
       setCurrentChainId(chainId);
       setIsCorrectNetwork(chainId === SEPOLIA_CHAIN_ID);
     } catch (error) {
@@ -96,7 +96,7 @@ export function useNetworkGuard(): NetworkState {
     checkNetwork();
 
     // Listen for network changes
-    if (window.ethereum) {
+    if (typeof window !== "undefined" && window.ethereum) {
       const handleChainChanged = (chainId: string) => {
         setCurrentChainId(chainId);
         setIsCorrectNetwork(chainId === SEPOLIA_CHAIN_ID);
@@ -108,12 +108,10 @@ export function useNetworkGuard(): NetworkState {
         }
       };
 
-      window.ethereum.on("chainChanged", handleChainChanged);
+      window.ethereum.on?.("chainChanged", handleChainChanged);
 
       return () => {
-        if (window.ethereum?.removeListener) {
-          window.ethereum.removeListener("chainChanged", handleChainChanged);
-        }
+        window.ethereum?.removeListener?.("chainChanged", handleChainChanged);
       };
     }
   }, []);

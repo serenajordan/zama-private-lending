@@ -1,5 +1,14 @@
-import { createInstance } from "@zama-fhe/relayer-sdk/web";
 import { ethers } from "ethers";
+
+// Only import FHEVM SDK on client side to avoid SSR issues
+let createInstance: any = null;
+if (typeof window !== "undefined") {
+  try {
+    createInstance = require("@zama-fhe/relayer-sdk/web").createInstance;
+  } catch (error) {
+    console.warn("FHEVM SDK not available:", error);
+  }
+}
 
 // Sepolia FHEVM Configuration
 const SepoliaConfig = {
@@ -18,16 +27,31 @@ let fhevmInstance: any = null;
 
 export const getRelayer = async () => {
   if (!fhevmInstance) {
-    try {
-      fhevmInstance = await createInstance(SepoliaConfig);
-    } catch (error) {
-      console.error("Failed to create FHEVM instance:", error);
-      // Fallback to mock instance for development
+    if (typeof window === "undefined" || !createInstance) {
+      // Server-side or FHEVM not available - return mock instance
       fhevmInstance = {
         createEncryptedInput: () => ({ encryptedValue: "0x" }),
         publicDecrypt: async () => ({}),
         userDecrypt: async () => ({}),
+        generateKeypair: async () => ({ privateKey: "0x1", publicKey: "0x2" }),
+        add64: async (input: any) => input,
+        encrypt: async (input: any) => input.encryptedValue || "0x",
       };
+    } else {
+      try {
+        fhevmInstance = await createInstance(SepoliaConfig);
+      } catch (error) {
+        console.error("Failed to create FHEVM instance:", error);
+        // Fallback to mock instance for development
+        fhevmInstance = {
+          createEncryptedInput: () => ({ encryptedValue: "0x" }),
+          publicDecrypt: async () => ({}),
+          userDecrypt: async () => ({}),
+          generateKeypair: async () => ({ privateKey: "0x1", publicKey: "0x2" }),
+          add64: async (input: any) => input,
+          encrypt: async (input: any) => input.encryptedValue || "0x",
+        };
+      }
     }
   }
   return fhevmInstance;
