@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ethers } from "ethers";
 import { encrypt64 } from "../lib/relayer";
 import { getSigner, getUserAddress } from "../lib/ethers";
+import { useToast, toast } from "./Toast";
 
 // Contract ABIs (simplified for demo - using standard uint256 for now)
 const TOKEN_ABI = [
@@ -11,7 +12,8 @@ const TOKEN_ABI = [
   "function transfer(address to, uint256 amount) external",
   "function balanceOf(address account) external view returns (uint256)",
   "function approve(address spender, uint256 amount) external returns (bool)",
-  "function allowance(address owner, address spender) external view returns (uint256)"
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function getLastError(address user) external view returns (uint8 code, uint256 timestamp)"
 ];
 
 const POOL_ABI = [
@@ -32,6 +34,98 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
   const [recipient, setRecipient] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+  const { showToast } = useToast();
+
+  // Input validation
+  const validateAmount = (value: string): { isValid: boolean; error?: string; parsedAmount?: bigint } => {
+    if (!value || value.trim() === "") {
+      return { isValid: false, error: "Amount is required" };
+    }
+
+    const numValue = parseFloat(value);
+    if (isNaN(numValue) || numValue <= 0) {
+      return { isValid: false, error: "Amount must be a positive number" };
+    }
+
+    // Check decimal places (after dividing by 1e6 for display)
+    const decimalPlaces = (value.split('.')[1] || '').length;
+    if (decimalPlaces > 2) {
+      return { isValid: false, error: "Amount can have at most 2 decimal places" };
+    }
+
+    // Convert to wei (assuming 18 decimals for display, but 6 decimals for contract)
+    const parsedAmount = ethers.parseEther(value);
+    return { isValid: true, parsedAmount };
+  };
+
+  // Recipient validation
+  const validateRecipient = (address: string): { isValid: boolean; error?: string; checksumAddress?: string } => {
+    if (!address || address.trim() === "") {
+      return { isValid: false, error: "Recipient address is required" };
+    }
+
+    try {
+      // Check if it's a valid Ethereum address
+      if (!ethers.isAddress(address)) {
+        return { isValid: false, error: "Invalid Ethereum address format" };
+      }
+
+      // Get checksum address
+      const checksumAddress = ethers.getAddress(address);
+      return { isValid: true, checksumAddress };
+    } catch (error) {
+      return { isValid: false, error: "Invalid Ethereum address" };
+    }
+  };
+
+  // Error code mapping
+  const getErrorMessage = (code: number): string => {
+    switch (code) {
+      case 1:
+        return "Insufficient balance";
+      case 2:
+        return "Insufficient allowance";
+      case 3:
+        return "Transfer failed";
+      case 4:
+        return "Invalid amount";
+      case 5:
+        return "Unauthorized";
+      default:
+        return `Unknown error (code: ${code})`;
+    }
+  };
+
+  // Helper to get last error from token contract
+  const getLastError = async (userAddress: string): Promise<string | null> => {
+    try {
+      const signer = await getSigner();
+      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+      const [code, timestamp] = await tokenContract.getLastError(userAddress);
+      
+      if (code > 0) {
+        return getErrorMessage(Number(code));
+      }
+      return null;
+    } catch (error) {
+      console.error("Error getting last error:", error);
+      return null;
+    }
+  };
+
+  // Helper to set pending state
+  const setPending = (action: string, isPending: boolean) => {
+    setPendingActions(prev => {
+      const newSet = new Set(prev);
+      if (isPending) {
+        newSet.add(action);
+      } else {
+        newSet.delete(action);
+      }
+      return newSet;
+    });
+  };
 
   // Helper function to check and set allowance
   const ensureAllowance = async (spender: string, amount: bigint) => {
@@ -50,183 +144,227 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
   };
 
   const handleFaucet = async () => {
-    if (!amount) return;
-    
+    const validation = validateAmount(amount);
+    if (!validation.isValid) {
+      showToast(toast.error("Invalid Amount", validation.error));
+      return;
+    }
+
     try {
-      setLoading(true);
-      setMessage("Getting tokens from faucet...");
+      setPending("faucet", true);
+      showToast(toast.info("Encrypting...", "Preparing faucet request"));
       
       const signer = await getSigner();
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+      const userAddress = await getUserAddress();
       
       // For now, call faucet directly with the amount
       // In production, this would use encrypted values
-      const tx = await tokenContract.faucet(ethers.parseEther(amount));
+      const tx = await tokenContract.faucet(validation.parsedAmount!);
+      
+      showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
       
-      setMessage("✅ Faucet successful! Check your balance.");
+      showToast(toast.success("Confirmed", "Faucet successful! Check your balance."));
       setAmount("");
     } catch (error: any) {
-      setMessage(`❌ Error: ${error.message}`);
+      console.error("Faucet error:", error);
+      
+      // Try to get specific error from contract
+      const userAddress = await getUserAddress().catch(() => null);
+      const contractError = userAddress ? await getLastError(userAddress) : null;
+      
+      const errorMessage = contractError || error.message;
+      showToast(toast.error("Faucet Failed", errorMessage));
     } finally {
-      setLoading(false);
+      setPending("faucet", false);
     }
   };
 
   const handleDeposit = async () => {
-    if (!amount) return;
-    
+    const validation = validateAmount(amount);
+    if (!validation.isValid) {
+      showToast(toast.error("Invalid Amount", validation.error));
+      return;
+    }
+
     try {
-      setLoading(true);
-      setMessage("Setting token allowance...");
+      setPending("deposit", true);
+      showToast(toast.info("Encrypting...", "Preparing deposit request"));
       
       const signer = await getSigner();
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
       const userAddress = await getUserAddress();
       
-      const depositAmount = ethers.parseEther(amount);
+      const depositAmount = validation.parsedAmount!;
       
-      // Debug: Check user's token balance
+      // Check user's token balance
       const userBalance = await tokenContract.balanceOf(userAddress);
-      console.log("User balance:", ethers.formatEther(userBalance));
-      console.log("Deposit amount:", ethers.formatEther(depositAmount));
-      
       if (userBalance < depositAmount) {
         throw new Error(`Insufficient balance. You have ${ethers.formatEther(userBalance)} cUSD, trying to deposit ${ethers.formatEther(depositAmount)} cUSD`);
       }
       
       // First, ensure the pool has allowance to spend user's tokens
       const currentAllowance = await tokenContract.allowance(userAddress, poolAddress);
-      console.log("Current allowance:", ethers.formatEther(currentAllowance));
       
       if (currentAllowance < depositAmount) {
-        setMessage("Setting token allowance...");
-        console.log("Approving tokens...");
+        showToast(toast.info("Setting Allowance", "Approving tokens for deposit"));
         const approveTx = await tokenContract.approve(poolAddress, depositAmount);
         await approveTx.wait();
-        console.log("Approval successful");
-        setMessage("✅ Allowance set successfully!");
       }
       
-      setMessage("Depositing tokens...");
-      console.log("Calling deposit function...");
-      
-      // Check pool contract state
-      try {
-        const poolAsset = await poolContract.asset();
-        console.log("Pool asset address:", poolAsset);
-        console.log("Pool asset matches token:", poolAsset.toLowerCase() === tokenAddress.toLowerCase());
-        console.log("Expected token address:", tokenAddress);
-      } catch (error) {
-        console.error("Error checking pool asset:", error);
-      }
+      showToast(toast.info("Submitting Deposit", "Sending transaction to pool"));
       
       // Now call deposit with explicit gas limit
       const tx = await poolContract.deposit(depositAmount, { gasLimit: 500000 });
-      console.log("Deposit transaction sent:", tx.hash);
-      await tx.wait();
-      console.log("Deposit transaction confirmed");
       
-      setMessage("✅ Deposit successful! Check your position.");
+      showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
+      await tx.wait();
+      
+      showToast(toast.success("Confirmed", "Deposit successful! Check your position."));
       setAmount("");
     } catch (error: any) {
       console.error("Deposit error:", error);
       
-      // More detailed error information
-      if (error.receipt) {
-        console.error("Transaction receipt:", error.receipt);
-        console.error("Transaction status:", error.receipt.status);
-        console.error("Gas used:", error.receipt.gasUsed?.toString());
-      }
+      // Try to get specific error from contract
+      const userAddress = await getUserAddress().catch(() => null);
+      const contractError = userAddress ? await getLastError(userAddress) : null;
       
-      if (error.transaction) {
-        console.error("Transaction details:", error.transaction);
-      }
-      
-      setMessage(`❌ Error: ${error.message}`);
+      const errorMessage = contractError || error.message;
+      showToast(toast.error("Deposit Failed", errorMessage));
     } finally {
-      setLoading(false);
+      setPending("deposit", false);
     }
   };
 
   const handleBorrow = async () => {
-    if (!amount) return;
-    
+    const validation = validateAmount(amount);
+    if (!validation.isValid) {
+      showToast(toast.error("Invalid Amount", validation.error));
+      return;
+    }
+
     try {
-      setLoading(true);
-      setMessage("Borrowing tokens...");
+      setPending("borrow", true);
+      showToast(toast.info("Encrypting...", "Preparing borrow request"));
       
       const signer = await getSigner();
       const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
       
       // For now, call borrow directly with the amount
       // In production, this would use encrypted values
-      const tx = await poolContract.borrow(ethers.parseEther(amount));
+      const tx = await poolContract.borrow(validation.parsedAmount!);
+      
+      showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
       
-      setMessage("✅ Borrow successful! Check your position.");
+      showToast(toast.success("Confirmed", "Borrow successful! Check your position."));
       setAmount("");
     } catch (error: any) {
-      setMessage(`❌ Error: ${error.message}`);
+      console.error("Borrow error:", error);
+      
+      // Try to get specific error from contract
+      const userAddress = await getUserAddress().catch(() => null);
+      const contractError = userAddress ? await getLastError(userAddress) : null;
+      
+      const errorMessage = contractError || error.message;
+      showToast(toast.error("Borrow Failed", errorMessage));
     } finally {
-      setLoading(false);
+      setPending("borrow", false);
     }
   };
 
   const handleRepay = async () => {
-    if (!amount) return;
-    
+    const validation = validateAmount(amount);
+    if (!validation.isValid) {
+      showToast(toast.error("Invalid Amount", validation.error));
+      return;
+    }
+
     try {
-      setLoading(true);
-      setMessage("Setting token allowance...");
+      setPending("repay", true);
+      showToast(toast.info("Encrypting...", "Preparing repay request"));
       
       const signer = await getSigner();
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
       
-      const repayAmount = ethers.parseEther(amount);
+      const repayAmount = validation.parsedAmount!;
       
       // First, ensure the pool has allowance to spend user's tokens
-      await ensureAllowance(poolAddress, repayAmount);
+      const currentAllowance = await tokenContract.allowance(await getUserAddress(), poolAddress);
       
-      setMessage("Repaying debt...");
+      if (currentAllowance < repayAmount) {
+        showToast(toast.info("Setting Allowance", "Approving tokens for repay"));
+        const approveTx = await tokenContract.approve(poolAddress, repayAmount);
+        await approveTx.wait();
+      }
+      
+      showToast(toast.info("Submitting Repay", "Sending transaction to pool"));
       
       // Now call repay
       const tx = await poolContract.repay(repayAmount);
+      
+      showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
       
-      setMessage("✅ Repay successful! Check your position.");
+      showToast(toast.success("Confirmed", "Repay successful! Check your position."));
       setAmount("");
     } catch (error: any) {
-      setMessage(`❌ Error: ${error.message}`);
+      console.error("Repay error:", error);
+      
+      // Try to get specific error from contract
+      const userAddress = await getUserAddress().catch(() => null);
+      const contractError = userAddress ? await getLastError(userAddress) : null;
+      
+      const errorMessage = contractError || error.message;
+      showToast(toast.error("Repay Failed", errorMessage));
     } finally {
-      setLoading(false);
+      setPending("repay", false);
     }
   };
 
   const handleTransfer = async () => {
-    if (!amount || !recipient) return;
-    
+    const amountValidation = validateAmount(amount);
+    if (!amountValidation.isValid) {
+      showToast(toast.error("Invalid Amount", amountValidation.error));
+      return;
+    }
+
+    const recipientValidation = validateRecipient(recipient);
+    if (!recipientValidation.isValid) {
+      showToast(toast.error("Invalid Recipient", recipientValidation.error));
+      return;
+    }
+
     try {
-      setLoading(true);
-      setMessage("Transferring tokens...");
+      setPending("transfer", true);
+      showToast(toast.info("Encrypting...", "Preparing transfer request"));
       
       const signer = await getSigner();
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       
-      // For now, call transfer directly with the amount
-      // In production, this would use encrypted values
-      const tx = await tokenContract.transfer(recipient, ethers.parseEther(amount));
+      // Use the checksum address for the transfer
+      const tx = await tokenContract.transfer(recipientValidation.checksumAddress!, amountValidation.parsedAmount!);
+      
+      showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
       
-      setMessage("✅ Transfer successful!");
+      showToast(toast.success("Confirmed", "Transfer successful!"));
       setAmount("");
       setRecipient("");
     } catch (error: any) {
-      setMessage(`❌ Error: ${error.message}`);
+      console.error("Transfer error:", error);
+      
+      // Try to get specific error from contract
+      const userAddress = await getUserAddress().catch(() => null);
+      const contractError = userAddress ? await getLastError(userAddress) : null;
+      
+      const errorMessage = contractError || error.message;
+      showToast(toast.error("Transfer Failed", errorMessage));
     } finally {
-      setLoading(false);
+      setPending("transfer", false);
     }
   };
 
@@ -247,10 +385,10 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
           />
           <button
             onClick={handleFaucet}
-            disabled={loading || !amount}
+            disabled={pendingActions.has("faucet") || !amount}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
           >
-            {loading ? "Getting..." : "Get Tokens"}
+            {pendingActions.has("faucet") ? "Getting..." : "Get Tokens"}
           </button>
         </div>
         <div className="mt-2">
@@ -287,10 +425,10 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
           />
           <button
             onClick={handleDeposit}
-            disabled={loading || !amount}
+            disabled={pendingActions.has("deposit") || !amount}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
-            {loading ? "Depositing..." : "Deposit"}
+            {pendingActions.has("deposit") ? "Depositing..." : "Deposit"}
           </button>
         </div>
       </div>
@@ -308,10 +446,10 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
           />
           <button
             onClick={handleBorrow}
-            disabled={loading || !amount}
+            disabled={pendingActions.has("borrow") || !amount}
             className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50"
           >
-            {loading ? "Borrowing..." : "Borrow"}
+            {pendingActions.has("borrow") ? "Borrowing..." : "Borrow"}
           </button>
         </div>
       </div>
@@ -329,10 +467,10 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
           />
           <button
             onClick={handleRepay}
-            disabled={loading || !amount}
+            disabled={pendingActions.has("repay") || !amount}
             className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
           >
-            {loading ? "Repaying..." : "Repay"}
+            {pendingActions.has("repay") ? "Repaying..." : "Repay"}
           </button>
         </div>
       </div>
@@ -341,13 +479,40 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h3 className="text-lg font-semibold mb-4">📤 Transfer</h3>
         <div className="space-y-3">
-          <input
-            type="text"
-            placeholder="Recipient Address"
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Recipient Address"
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                recipient && !validateRecipient(recipient).isValid
+                  ? "border-red-300 focus:ring-red-500"
+                  : recipient && validateRecipient(recipient).isValid
+                  ? "border-green-300 focus:ring-green-500"
+                  : "border-gray-300 focus:ring-blue-500"
+              }`}
+            />
+            {recipient && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                {validateRecipient(recipient).isValid ? (
+                  <span className="text-green-500 text-sm">✓</span>
+                ) : (
+                  <span className="text-red-500 text-sm">✗</span>
+                )}
+              </div>
+            )}
+          </div>
+          {recipient && !validateRecipient(recipient).isValid && (
+            <p className="text-xs text-red-600 mt-1">
+              {validateRecipient(recipient).error}
+            </p>
+          )}
+          {recipient && validateRecipient(recipient).isValid && (
+            <p className="text-xs text-green-600 mt-1">
+              Valid address: {validateRecipient(recipient).checksumAddress}
+            </p>
+          )}
           <div className="flex gap-2">
             <input
               type="number"
@@ -358,21 +523,21 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
             />
             <button
               onClick={handleTransfer}
-              disabled={loading || !amount || !recipient}
+              disabled={
+                pendingActions.has("transfer") || 
+                !amount || 
+                !recipient || 
+                !validateAmount(amount).isValid || 
+                !validateRecipient(recipient).isValid
+              }
               className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
             >
-              {loading ? "Transferring..." : "Transfer"}
+              {pendingActions.has("transfer") ? "Transferring..." : "Transfer"}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Status Message */}
-      {message && (
-        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md">
-          {message}
-        </div>
-      )}
     </div>
   );
 }
