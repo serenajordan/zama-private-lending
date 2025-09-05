@@ -33,9 +33,10 @@ contract PrivateLendingPool {
     uint64 constant PRECISION_BPS = 10000;  // 100% in basis points
 
     // Events
-    event Deposit(address indexed user, uint256 amount);
-    event Borrow(address indexed user, uint256 amount);
-    event Repay(address indexed user, uint256 amount);
+    event Deposited(address indexed user);
+    event Borrowed(address indexed user);
+    event Repaid(address indexed user);
+    event Liquidated(address indexed liquidator, address indexed target);
     event AssetUpdated(address indexed oldAsset, address indexed newAsset);
 
     constructor(address _asset) {
@@ -79,7 +80,7 @@ contract PrivateLendingPool {
         // Update user's deposit
         deposits[msg.sender] += amount;
         
-        emit Deposit(msg.sender, amount);
+        emit Deposited(msg.sender);
     }
 
     /**
@@ -109,7 +110,7 @@ contract PrivateLendingPool {
         // Transfer tokens to user
         asset.push(address(this), msg.sender, borrowAmount);
         
-        emit Borrow(msg.sender, borrowAmount);
+        emit Borrowed(msg.sender);
     }
 
     /**
@@ -134,7 +135,7 @@ contract PrivateLendingPool {
         // Update user's debt
         debts[msg.sender] -= repayAmount;
         
-        emit Repay(msg.sender, repayAmount);
+        emit Repaid(msg.sender);
     }
 
     /**
@@ -155,5 +156,41 @@ contract PrivateLendingPool {
         uint256 borrowingCapacity = (deposits[user] * LTV_BPS) / PRECISION_BPS;
         
         return debts[user] <= borrowingCapacity;
+    }
+
+    /**
+     * @dev Simple soft liquidation function
+     * @param target Address to liquidate
+     * @param encRepay Encrypted repayment amount
+     * @param proof Proof for encrypted amount
+     */
+    function liquidateSimple(address target, uint256 encRepay, bytes calldata proof) external {
+        // TODO: Re-enable FHEVM types once version compatibility is resolved
+        // health: debt > cap
+        // euint64 cap = FHE.div(FHE.mul(deposits[target], FHE.asEuint64(LTV_BPS)), FHE.asEuint64(PRECISION_BPS));
+        // ebool unhealthy = FHE.gt(debts[target], cap);
+
+        // euint64 repay = FHE.fromExternal(encRepay, proof);
+        // repay.allowThis(); 
+        // repay.allowTransient(address(asset));
+
+        // allowed = unhealthy ? min(repay, debt[target]) : 0
+        // euint64 allowed = FHE.select(unhealthy, FHE.select(FHE.le(repay, debts[target]), repay, debts[target]), FHE.asEuint64(0));
+
+        // asset.pull(msg.sender, address(this), allowed);
+        // debts[target] = FHE.sub(debts[target], allowed);
+        // debts[target].allowThis();
+
+        // For now, simplified version without FHEVM
+        uint256 cap = (deposits[target] * LTV_BPS) / PRECISION_BPS;
+        bool unhealthy = debts[target] > cap;
+        
+        if (unhealthy) {
+            uint256 allowed = encRepay <= debts[target] ? encRepay : debts[target];
+            asset.pull(msg.sender, address(this), allowed);
+            debts[target] -= allowed;
+        }
+
+        emit Liquidated(msg.sender, target);
     }
 }

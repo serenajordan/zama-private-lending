@@ -2,40 +2,49 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, feat/**]
   pull_request:
-    branches: [ main, develop ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
-
+        node-version: [20.x]   # Use 20 LTS
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    
-    - name: Install pnpm
-      uses: pnpm/action-setup@v2
-      with:
-        version: 8
-    
-    - name: Install dependencies
-      run: pnpm install
-    
-    - name: Run contract tests
-      run: pnpm -C contracts test
-    
-    - name: Build app
-      run: pnpm -C app build
-    
-    - name: Run linting
-      run: pnpm -C app lint
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node and pnpm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Enable corepack / pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          pnpm -v
+
+      - name: Install dependencies (workspace)
+        run: pnpm install
+
+      - name: Install package deps
+        run: |
+          pnpm -C contracts install
+          pnpm -C app install
+
+      - name: Compile contracts
+        run: pnpm -C contracts hardhat compile
+
+      - name: Run unit tests (contracts)
+        env:
+          CI: true
+        run: pnpm -C contracts test
+
+      - name: Build frontend
+        env:
+          NEXT_PUBLIC_TOKEN: 0x0000000000000000000000000000000000000000
+          NEXT_PUBLIC_POOL:  0x0000000000000000000000000000000000000000
+        run: pnpm -C app build

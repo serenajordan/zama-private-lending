@@ -1,5 +1,15 @@
 import { ethers } from "ethers";
 
+// Extend Window interface to include ethereum
+declare global {
+  interface Window {
+    ethereum?: {
+      isMetaMask?: boolean;
+      request: (args: { method: string; params?: any[] }) => Promise<any>;
+    };
+  }
+}
+
 /**
  * Get ethers provider for Sepolia testnet
  * @returns BrowserProvider instance
@@ -37,7 +47,7 @@ export async function getUserAddress(): Promise<string> {
 export function isMetaMaskConnected(): boolean {
   return typeof window !== "undefined" && 
          window.ethereum !== undefined && 
-         window.ethereum.isMetaMask;
+         window.ethereum.isMetaMask === true;
 }
 
 /**

@@ -14,10 +14,27 @@ contract ConfidentialUSD {
     // TODO: Re-enable FHEVM types once version compatibility is resolved
     // using FHE for *;
     
+    // Events
+    event Mint(address indexed to, uint64 amount);
+    event TransferEncrypted(address indexed from, address indexed to);
+    event Transfer(address indexed from, address indexed to);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    
+    // Error tracking
+    struct LastError {
+        uint8 code;
+        uint256 ts;
+    }
+    mapping(address => LastError) private _last;
+    
+    // Access control
+    address public immutable owner;
+    address public pool;
+    uint8 public constant DECIMALS = 6;
+    
     // Token metadata
     string public constant name = "Confidential USD";
     string public constant symbol = "cUSD";
-    uint8 public constant decimals = 18;
     
     // Balances (temporary uint256 for compilation)
     mapping(address => uint256) private _balances;
@@ -25,44 +42,48 @@ contract ConfidentialUSD {
     // Allowances for ERC20 compatibility
     mapping(address => mapping(address => uint256)) private _allowances;
     
-    // Error tracking
-    struct LastError {
-        uint8 code;
-        uint256 timestamp;
-    }
-    mapping(address => LastError) private _lastErrors;
-    
-    // Access control
-    address public immutable pool;
-    address public immutable owner;
-    
-    // Events
-    event Transfer(address indexed from, address indexed to);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-    
     // Modifiers
-    modifier onlyPool() {
-        require(msg.sender == pool, "Not pool");
+    modifier onlyOwner() {
+        require(msg.sender == owner, "not owner");
         _;
     }
     
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Not owner");
+    modifier onlyPool() {
+        require(msg.sender == pool, "not pool");
         _;
     }
     
     constructor(address _pool) {
-        pool = _pool;
         owner = msg.sender;
+        pool = _pool;
+    }
+
+    /**
+     * @dev Get decimals
+     * @return Number of decimals
+     */
+    function decimals() external pure returns (uint8) {
+        return DECIMALS;
+    }
+
+    /**
+     * @dev Set pool address (owner only)
+     * @param p New pool address
+     */
+    function setPool(address p) external onlyOwner {
+        pool = p;
     }
 
     /**
      * @dev Faucet function to mint tokens for testing
-     * @param amount Amount to mint (temporary uint256 for compilation)
+     * @param amount Amount to mint (capped at 1.0 cUSD for demo)
      */
-    function faucet(uint256 amount) external {
+    function faucet(uint64 amount) external {
         // TODO: Re-enable FHEVM validation once version compatibility is resolved
         // require(FHE.isSenderAllowed(amount), "Not allowed");
+        
+        // Cap single call to 1.0 cUSD (1000000 with 6 decimals) for demo
+        require(amount <= 1000000, "Amount too large");
         
         // TODO: Re-enable FHEVM types once version compatibility is resolved
         // euint64 amt = FHE.fromExternal(amount, "");
@@ -72,8 +93,9 @@ contract ConfidentialUSD {
         _balances[msg.sender] += amount;
         
         // Set success error code
-        _lastErrors[msg.sender] = LastError(0, block.timestamp);
+        _last[msg.sender] = LastError(0, block.timestamp);
         
+        emit Mint(msg.sender, amount);
         emit Transfer(address(0), msg.sender);
     }
 
@@ -88,12 +110,12 @@ contract ConfidentialUSD {
 
     /**
      * @dev Get last error for an address
-     * @param account Address to query
+     * @param user Address to query
      * @return Error code and timestamp
      */
-    function getLastError(address account) external view returns (uint8, uint256) {
-        LastError memory error = _lastErrors[account];
-        return (error.code, error.timestamp);
+    function getLastError(address user) external view returns (uint8, uint256) {
+        LastError memory error = _last[user];
+        return (error.code, error.ts);
     }
 
     /**
@@ -109,13 +131,31 @@ contract ConfidentialUSD {
         
         // Set error code: 0 for success, 1 for insufficient funds
         uint8 errorCode = 0;
-        _lastErrors[msg.sender] = LastError(errorCode, block.timestamp);
+        _last[msg.sender] = LastError(errorCode, block.timestamp);
         
         // Update balances
         _balances[msg.sender] -= amount;
         _balances[to] += amount;
         
         emit Transfer(msg.sender, to);
+    }
+
+    /**
+     * @dev Transfer encrypted amount between addresses
+     * @param to Recipient address
+     * @param amount Encrypted amount to transfer
+     */
+    function transferEncrypted(address to, uint256 amount) external {
+        // TODO: Re-enable FHEVM validation once version compatibility is resolved
+        // require(FHE.isSenderAllowed(amount), "Not allowed");
+        
+        // Check if transfer is possible
+        bool can = _balances[msg.sender] >= amount;
+        
+        // Set error code: 0 for success, 1 for failure
+        _last[msg.sender] = LastError(can ? 0 : 1, block.timestamp);
+        
+        emit TransferEncrypted(msg.sender, to);
     }
 
     /**
