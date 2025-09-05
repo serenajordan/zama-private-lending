@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
+import { getPool, TOKEN_ADDR, POOL_ADDR } from "@/lib/contracts";
 import { userDecryptPosition } from "../lib/relayer";
 import { getSigner, getUserAddress, isMetaMaskConnected, getProvider } from "../lib/ethers";
 
@@ -11,7 +12,8 @@ const TOKEN_ABI = [
 ];
 
 const POOL_ABI = [
-  "function viewMyPosition() external view returns (string deposit, string debt)",
+  "function asset() external view returns (address)",
+  "function viewMyPosition() external view returns (uint256 deposit, uint256 debt)",
   "function getHealthFactor(address user) external view returns (bool)"
 ];
 
@@ -84,23 +86,25 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
       setError("");
       
       const signer = await getSigner();
-      const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
+      const poolContract = await getPool()
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       const userAddress = await getUserAddress();
       
-      // Get ciphertext handles from pool
-      const [depositHandle, debtHandle] = await poolContract.viewMyPosition();
+      // Test contract connectivity first
+      console.log("🔍 Testing contract connectivity...");
+      try {
+        const assetAddress = await poolContract.asset();
+        console.log("📊 Asset address:", assetAddress);
+      } catch (error) {
+        console.error("❌ Asset call failed:", error);
+      }
       
-      // Decrypt the handles to get plaintext values
-      const decryptedData = await userDecryptPosition(
-        [depositHandle, debtHandle],
-        poolAddress,
-        signer
-      );
-      
-      // Extract decrypted values (assuming keys are 'position_0' and 'position_1')
-      const deposit = decryptedData.position_0 || BigInt(0);
-      const debt = decryptedData.position_1 || BigInt(0);
+      // Get position data directly (uint256 values for now)
+      console.log("🔍 Calling viewMyPosition...");
+      const result = await poolContract.viewMyPosition();
+      console.log("📊 Raw result:", result);
+      const [deposit, debt] = result;
+      console.log("📊 Parsed values:", { deposit: deposit.toString(), debt: debt.toString() });
       
       // Get token balance (still public)
       const balance = await tokenContract.balanceOf(userAddress);
@@ -122,8 +126,8 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
       });
       
     } catch (error: any) {
-      setError(`Error loading position: ${error.message}`);
       console.error("Dashboard error:", error);
+      setError(`Error loading position: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -325,3 +329,4 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
     </div>
   );
 }
+// addresses exposed via lib/contracts.ts: TOKEN_ADDR, POOL_ADDR

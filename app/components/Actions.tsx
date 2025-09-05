@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { ethers } from "ethers";
+import { getPool, getToken } from "@/lib/contracts";
 import { encrypt64 } from "../lib/relayer";
 import { getSigner, getUserAddress } from "../lib/ethers";
 import { useToast, toast } from "./Toast";
 
 // Contract ABIs (simplified for demo - using standard uint256 for now)
 const TOKEN_ABI = [
-  "function faucet(uint256 amount) external",
+  "function faucet(uint64 amount) external",
   "function transfer(address to, uint256 amount) external",
   "function balanceOf(address account) external view returns (uint256)",
   "function approve(address spender, uint256 amount) external returns (bool)",
@@ -101,14 +102,18 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
   const getLastError = async (userAddress: string): Promise<string | null> => {
     try {
       const signer = await getSigner();
-      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+      const tokenContract = await getToken()
       const [code, timestamp] = await tokenContract.getLastError(userAddress);
       
       if (code > 0) {
         return getErrorMessage(Number(code));
       }
       return null;
-    } catch (error) {
+    } catch (error: any) {
+      // If the error is BAD_DATA, it means no error has been recorded yet
+      if (error.code === 'BAD_DATA') {
+        return null;
+      }
       console.error("Error getting last error:", error);
       return null;
     }
@@ -130,7 +135,7 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
   // Helper function to check and set allowance
   const ensureAllowance = async (spender: string, amount: bigint) => {
     const signer = await getSigner();
-    const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+    const tokenContract = await getToken()
     const userAddress = await getUserAddress();
     
     const currentAllowance = await tokenContract.allowance(userAddress, spender);
@@ -155,12 +160,16 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       showToast(toast.info("Encrypting...", "Preparing faucet request"));
       
       const signer = await getSigner();
-      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+      const tokenContract = await getToken()
       const userAddress = await getUserAddress();
       
-      // For now, call faucet directly with the amount
-      // In production, this would use encrypted values
-      const tx = await tokenContract.faucet(validation.parsedAmount!);
+      // Convert to token units (6 decimals) for the contract
+      const tokenAmount = Math.floor(Number(validation.parsedAmount!) * 1000000); // 6 decimals
+      if (tokenAmount > Number.MAX_SAFE_INTEGER) {
+        throw new Error("Amount too large for uint64");
+      }
+      
+      const tx = await tokenContract.faucet(tokenAmount);
       
       showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
@@ -193,8 +202,8 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       showToast(toast.info("Encrypting...", "Preparing deposit request"));
       
       const signer = await getSigner();
-      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
-      const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
+      const tokenContract = await getToken()
+      const poolContract = await getPool()
       const userAddress = await getUserAddress();
       
       const depositAmount = validation.parsedAmount!;
@@ -250,7 +259,7 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       showToast(toast.info("Encrypting...", "Preparing borrow request"));
       
       const signer = await getSigner();
-      const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
+      const poolContract = await getPool()
       
       // For now, call borrow directly with the amount
       // In production, this would use encrypted values
@@ -287,8 +296,8 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       showToast(toast.info("Encrypting...", "Preparing repay request"));
       
       const signer = await getSigner();
-      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
-      const poolContract = new ethers.Contract(poolAddress, POOL_ABI, signer);
+      const tokenContract = await getToken()
+      const poolContract = await getPool()
       
       const repayAmount = validation.parsedAmount!;
       
@@ -343,7 +352,7 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       showToast(toast.info("Encrypting...", "Preparing transfer request"));
       
       const signer = await getSigner();
-      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+      const tokenContract = await getToken()
       
       // Use the checksum address for the transfer
       const tx = await tokenContract.transfer(recipientValidation.checksumAddress!, amountValidation.parsedAmount!);
@@ -396,7 +405,7 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
             onClick={async () => {
               try {
                 const signer = await getSigner();
-                const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
+                const tokenContract = await getToken()
                 const userAddress = await getUserAddress();
                 const balance = await tokenContract.balanceOf(userAddress);
                 console.log("Current balance:", ethers.formatEther(balance));
