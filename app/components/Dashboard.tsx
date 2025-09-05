@@ -172,7 +172,7 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
               <div className="flex justify-between">
                 <span>Current LTV:</span>
                 <span className="font-semibold">
-                  {position.deposit > 0n 
+                  {position.deposit > BigInt(0) 
                     ? `${Math.round(Number(position.debt) / Number(position.deposit) * 100)}%`
                     : '0%'
                   }
