@@ -1,17 +1,15 @@
-import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-ethers";
 // import "@fhevm/hardhat-plugin";
+import "hardhat-gas-reporter";
 import "dotenv/config";
 
-const config: HardhatUserConfig = {
-  solidity: {
-    version: "0.8.24",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
-      },
-    },
+export default {
+  solidity: "0.8.24",
+  gasReporter: { 
+    enabled: true, 
+    currency: "USD", 
+    coinmarketcap: process.env.CMC_KEY || "", 
+    showTimeSpent: true 
   },
   networks: {
     sepolia: {
@@ -36,5 +34,3 @@ const config: HardhatUserConfig = {
     artifacts: "./artifacts",
   },
 };
-
-export default config;

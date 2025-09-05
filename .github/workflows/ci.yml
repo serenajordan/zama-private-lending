@@ -15,36 +15,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node and pnpm cache
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'pnpm'
 
-      - name: Enable corepack / pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Get pnpm store directory
+        shell: bash
         run: |
-          corepack enable
-          corepack prepare pnpm@latest --activate
-          pnpm -v
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies (workspace)
         run: pnpm install
 
       - name: Install package deps
         run: |
-          pnpm -C contracts install
-          pnpm -C app install
+          pnpm --filter contracts install
+          pnpm --filter app install
+
+      - name: Verify installation
+        run: |
+          pnpm list --depth=0
+          pnpm --filter contracts list --depth=0
+          pnpm --filter app list --depth=0
 
       - name: Compile contracts
-        run: pnpm -C contracts hardhat compile
+        run: pnpm --filter contracts hardhat compile
 
       - name: Run unit tests (contracts)
         env:
           CI: true
-        run: pnpm -C contracts test
+        run: |
+          echo "Running contract tests..."
+          pnpm --filter contracts test
+          echo "Contract tests completed successfully"
 
       - name: Build frontend
         env:
           NEXT_PUBLIC_TOKEN: 0x0000000000000000000000000000000000000000
           NEXT_PUBLIC_POOL:  0x0000000000000000000000000000000000000000
-        run: pnpm -C app build
+        run: |
+          echo "Building frontend..."
+          pnpm --filter app build
+          echo "Frontend build completed successfully"
