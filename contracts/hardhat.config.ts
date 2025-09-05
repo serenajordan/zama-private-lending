@@ -1,18 +1,15 @@
-import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-ethers";
 // import "@fhevm/hardhat-plugin";
 import "hardhat-gas-reporter";
 import "dotenv/config";
 
-const config: HardhatUserConfig = {
-  solidity: {
-    version: "0.8.24",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
-      },
-    },
+export default {
+  solidity: "0.8.24",
+  gasReporter: { 
+    enabled: true, 
+    currency: "USD", 
+    coinmarketcap: process.env.CMC_KEY || "", 
+    showTimeSpent: true 
   },
   networks: {
     sepolia: {
@@ -30,12 +27,6 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
   },
-  gasReporter: {
-    enabled: process.env.REPORT_GAS !== undefined,
-    currency: "USD",
-    gasPrice: 20, // gwei
-    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
-  },
   paths: {
     sources: "./contracts",
     tests: "./test",
@@ -43,5 +34,3 @@ const config: HardhatUserConfig = {
     artifacts: "./artifacts",
   },
 };
-
-export default config;
