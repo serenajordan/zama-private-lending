@@ -1,40 +1,47 @@
 # Zama Private Lending Protocol
 
+![CI](https://github.com/serenajordan/zama-private-lending/actions/workflows/ci.yml/badge.svg)
+
 A confidential lending protocol built on Zama's fhEVM, enabling private DeFi operations with fully homomorphic encryption.
+
+## Deployed Addresses (Sepolia)
+
+- **ConfidentialUSD Token**: `0x0000000000000000000000000000000000000000` *(To be deployed)*
+- **PrivateLendingPool**: `0x0000000000000000000000000000000000000000` *(To be deployed)*
 
 ## What's Private vs Public
 
-In traditional DeFi, all transaction amounts, balances, and positions are publicly visible on-chain. This creates several problems:
-
-- **MEV attacks**: Front-running and sandwich attacks based on visible transaction sizes
-- **Privacy leaks**: Competitors can see your trading strategies and capital allocation
-- **Targeted attacks**: Large positions become visible targets for exploitation
-
-Our protocol uses Zama's fhEVM to encrypt all sensitive data:
-- **Encrypted balances**: Your USD balance is encrypted and only you can decrypt it
-- **Private transactions**: Transfer amounts are encrypted during execution
-- **Confidential positions**: Your deposit and debt amounts remain private
-- **Zero-knowledge proofs**: Validates transactions without revealing amounts
-
-## Sepolia Testnet Addresses
-
-### FHEVM Infrastructure
-- **FHEVM Registry**: `0x000000000000000000000000000000000000005a`
-- **FHEVM Verifier**: `0x000000000000000000000000000000000000005b`
-- **FHEVM Gateway**: `0x000000000000000000000000000000000000005c`
-
-### Protocol Contracts
-- **ConfidentialUSD Token**: `[TO BE DEPLOYED]`
-- **PrivateLendingPool**: `[TO BE DEPLOYED]`
+| Data Type | Privacy Level | Implementation |
+|-----------|---------------|----------------|
+| Token balances | 🔒 **Private (FHE)** | Encrypted on-chain, only user can decrypt |
+| Deposit/borrow amounts | 🔒 **Private (FHE)** | Encrypted during execution |
+| Health flag | 🌐 **Public bool only** | Boolean liquidation status |
+| Liquidation action | 🌐 **Public, amounts private** | Action visible, amounts encrypted |
 
 ## Quick Start
 
-### Prerequisites
+### 1. Faucet
+Get demo cUSD tokens to start interacting with the protocol.
+
+### 2. Deposit
+Lock encrypted tokens as collateral for borrowing.
+
+### 3. Borrow
+Take out loans against your collateral (up to 70% LTV).
+
+### 4. Repay
+Pay back loans to unlock your collateral.
+
+> **⚠️ Limitations / Demo Only**: This is a demonstration protocol. Do not use with real funds. The FHEVM infrastructure is still in development.
+
+## Prerequisites
+
 - Node.js 18+
 - PNPM 8+
 - MetaMask with Sepolia testnet configured
 
-### Installation
+## Installation
+
 ```bash
 # Clone the repository
 git clone <your-repo-url>
@@ -49,7 +56,8 @@ cp app/.env.local.example app/.env.local
 # Edit .env files with your private key and RPC URL
 ```
 
-### Development
+## Development
+
 ```bash
 # Start the Next.js app
 pnpm dev
@@ -61,29 +69,12 @@ pnpm test
 pnpm deploy:sepolia
 ```
 
-## Run Scripts
+## Available Scripts
 
 - `pnpm dev` - Start development server
 - `pnpm build` - Build production app
 - `pnpm test` - Run contract tests
 - `pnpm deploy:sepolia` - Deploy contracts to Sepolia
-
-## Deployed Addresses
-
-*These will be populated after deployment*
-
-- **ConfidentialUSD**: `[DEPLOYED_ADDRESS]`
-- **PrivateLendingPool**: `[DEPLOYED_ADDRESS]`
-- **Demo URL**: `[DEMO_URL]`
-
-## How It Works
-
-1. **Faucet**: Get encrypted test tokens
-2. **Deposit**: Lock encrypted tokens as collateral
-3. **Borrow**: Take out loans against your collateral (up to 70% LTV)
-4. **Repay**: Pay back loans to unlock collateral
-
-All operations use encrypted inputs and maintain privacy throughout the process.
 
 ## HCU Notes
 

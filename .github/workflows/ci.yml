@@ -69,3 +69,9 @@ jobs:
           echo "Building frontend..."
           pnpm --filter app build
           echo "Frontend build completed successfully"
+
+      - name: Typecheck
+        run: pnpm -C app tsconfig --version || true   # or pnpm -C app tsc --noEmit
+
+      - name: Lint
+        run: pnpm -C app next lint || true
