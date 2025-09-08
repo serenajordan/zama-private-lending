@@ -41,27 +41,22 @@ jobs:
       - name: Install dependencies (workspace)
         run: pnpm install
 
-      - name: Install package deps
-        run: |
-          pnpm -C contracts install
-          pnpm -C app install
-
       - name: Compile contracts
-        run: pnpm -C contracts hardhat compile
+        run: pnpm --filter @zama-private-lending/contracts run build
 
       - name: Run unit tests (contracts)
         env:
           CI: true
-        run: pnpm -C contracts test || true
+        run: pnpm --filter @zama-private-lending/contracts run test || true
 
       - name: Build frontend
         env:
           NEXT_PUBLIC_TOKEN: "0x0000000000000000000000000000000000000000"
           NEXT_PUBLIC_POOL:  "0x0000000000000000000000000000000000000000"
-        run: pnpm -C app build
+        run: pnpm --filter @zama-private-lending/app run build
 
       - name: Typecheck
-        run: pnpm -C app tsc --noEmit || true
+        run: cd app && npx tsc --noEmit || true
 
       - name: Lint
-        run: pnpm -C app next lint || true
+        run: pnpm --filter @zama-private-lending/app run lint || true
