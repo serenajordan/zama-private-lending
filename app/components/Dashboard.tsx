@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { getPool, TOKEN_ADDR, POOL_ADDR } from "@/lib/contracts";
-import { getPool, TOKEN_ADDR, POOL_ADDR } from "@/lib/contracts";
 import { userDecryptPosition } from "../lib/relayer";
 import { getSigner, getUserAddress, isMetaMaskConnected, getProvider } from "../lib/ethers";
 
