@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { ethers } from "ethers";
 import { getPool, getToken } from "@/lib/contracts";
-import { toU64Micro } from "@/lib/amount";
+import { toU64Units } from "@/lib/amount";
 import { encryptU64 } from "@/lib/relayer";
+import { getTokenDecimals } from "@/lib/tokenMeta";
 import { getSigner, getUserAddress } from "../lib/ethers";
 import { useToast, toast } from "./Toast";
 
@@ -53,7 +54,7 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
     // Check decimal places (after dividing by 1e6 for display)
     const decimalPlaces = (value.split('.')[1] || '').length;
     if (decimalPlaces > 2) {
-      return { isValid: false, error: "Amount can have at most 2 decimal places" };
+      return { isValid: false, error: "Invalid amount format" };
     }
 
     // Convert to wei (assuming 18 decimals for display, but 6 decimals for contract)
@@ -149,6 +150,14 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
     }
   };
 
+  let _decimals = 18;
+  async function ensureDecimals() {
+    if (_decimals === null || _decimals === undefined) {
+      _decimals = await getTokenDecimals();
+    }
+    return _decimals;
+  }
+
   const handleFaucet = async () => {
     const validation = validateAmount(amount);
     if (!validation.isValid) {
@@ -162,7 +171,8 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       
       const signer = await getSigner();
       const tokenContract = await getToken()
-      const v = toU64Micro(amount);
+      const d = await ensureDecimals();
+      const v = toU64Units(amount, d);
       const tx = await tokenContract.faucet(v);
       
       showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
@@ -200,7 +210,8 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       const poolContract = await getPool()
       const userAddress = await getUserAddress();
       
-      const v = toU64Micro(amount);
+      const d = await ensureDecimals();
+      const v = toU64Units(amount, d);
       
       // First, ensure the pool has allowance to pull tokens if needed (keeping current ERC20 path for now)
       const currentAllowance = await tokenContract.allowance(userAddress, poolAddress);
@@ -246,7 +257,8 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       const signer = await getSigner();
       const poolContract = await getPool();
       const addr = await getUserAddress();
-      const v = toU64Micro(amount);
+      const d = await ensureDecimals();
+      const v = toU64Units(amount, d);
       const { handles, inputProof } = await encryptU64(poolAddress, addr, v);
       const tx = await poolContract.borrow(handles[0], inputProof);
       
@@ -283,7 +295,8 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       const signer = await getSigner();
       const poolContract = await getPool();
       const addr = await getUserAddress();
-      const v = toU64Micro(amount);
+      const d = await ensureDecimals();
+      const v = toU64Units(amount, d);
       const { handles, inputProof } = await encryptU64(poolAddress, addr, v);
       const tx = await poolContract.repay(handles[0], inputProof);
       

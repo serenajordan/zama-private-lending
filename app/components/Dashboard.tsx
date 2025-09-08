@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { getPool, TOKEN_ADDR, POOL_ADDR } from "@/lib/contracts";
+import { getTokenDecimals } from "@/lib/tokenMeta";
 import { getSigner, getUserAddress, isMetaMaskConnected, getProvider } from "../lib/ethers";
 
 // Contract ABIs (simplified for demo - using standard uint256 for now)
@@ -27,6 +28,7 @@ interface Position {
   balance: bigint;
   healthFactor: boolean;
   ltv: number;
+  decimals: number;
 }
 
 export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps) {
@@ -88,6 +90,7 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
       const poolContract = await getPool()
       const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, signer);
       const userAddress = await getUserAddress();
+      const decimals = await getTokenDecimals();
       
       // Test contract connectivity first
       console.log("🔍 Testing contract connectivity...");
@@ -121,7 +124,8 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
         debt,
         balance,
         healthFactor,
-        ltv
+        ltv,
+        decimals
       });
       
     } catch (error: any) {
@@ -228,7 +232,7 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
           <div className="bg-blue-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold text-blue-900 mb-2">💰 Token Balance</h3>
             <div className="text-2xl font-bold text-blue-700">
-              {ethers.formatEther(position.balance)} cUSD
+              {ethers.formatUnits(position.balance, position.decimals)} cUSD
             </div>
           </div>
 
@@ -237,7 +241,7 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
             <div className="bg-green-50 p-4 rounded-lg">
               <h3 className="text-lg font-semibold text-green-900 mb-2">📈 Total Deposits</h3>
               <div className="text-2xl font-bold text-green-700">
-                {formatWithDecimals(position.deposit, 6)} cUSD
+                {formatWithDecimals(position.deposit, position.decimals)} cUSD
               </div>
               <div className="text-xs text-green-600 mt-1">
                 🔒 Encrypted on-chain
@@ -247,7 +251,7 @@ export default function Dashboard({ tokenAddress, poolAddress }: DashboardProps)
             <div className="bg-red-50 p-4 rounded-lg">
               <h3 className="text-lg font-semibold text-red-900 mb-2">💳 Total Debt</h3>
               <div className="text-2xl font-bold text-red-700">
-                {formatWithDecimals(position.debt, 6)} cUSD
+                {formatWithDecimals(position.debt, position.decimals)} cUSD
               </div>
               <div className="text-xs text-red-600 mt-1">
                 🔒 Encrypted on-chain
