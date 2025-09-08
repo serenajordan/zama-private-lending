@@ -20,11 +20,16 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
-      - name: Enable corepack / pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@latest --activate
-          pnpm -v
+
+      # Install pnpm so it's guaranteed on PATH (avoids "Unable to locate executable file: pnpm")
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Verify pnpm
+        run: pnpm -v
 
       - name: Install dependencies (workspace)
         run: pnpm install
