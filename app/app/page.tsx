@@ -1,5 +1,5 @@
 import { Navigation } from "@/components/navigation"
-import { Dashboard } from "@/components/dashboard"
+import { Dashboard } from "@/components/Dashboard"
 import { SystemBanner } from "@/components/system-banner"
 
 export default function Home() {

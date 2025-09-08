@@ -1,5 +1,5 @@
 // Barrel file for main components
-export { Dashboard } from './dashboard'
+export { Dashboard } from './Dashboard'
 export { Navigation } from './navigation'
 export { SystemBanner } from './system-banner'
 export { ActionsPanel } from './actions-panel'
