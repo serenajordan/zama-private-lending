@@ -41,6 +41,10 @@ jobs:
       - name: Install dependencies (workspace)
         run: pnpm install
 
+      - name: Install contracts deps
+        working-directory: contracts
+        run: pnpm install
+
       - name: Compile contracts
         run: pnpm --filter @zama-private-lending/contracts run build
 
