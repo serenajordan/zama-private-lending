@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { getPool, getToken } from "@/lib/contracts";
 import { toU64Units } from "@/lib/amount";
-import { encryptU64, relayerHealthy } from "@/lib/relayer";
+import { encryptU64, register as relayerRegister, relayerHealthy } from "@/lib/relayer";
 import { getTokenDecimals } from "@/lib/tokenMeta";
 import { getFaucetMax } from "@/lib/faucetLimit";
 import { getSigner, getUserAddress } from "../lib/ethers";
