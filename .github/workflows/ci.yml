@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/**]
+    branches: [main, feat/**, fix/**, test/**]
   pull_request:
 
 jobs:
@@ -15,18 +15,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node and pnpm cache
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'pnpm'
 
-      # Install pnpm so it's guaranteed on PATH (avoids "Unable to locate executable file: pnpm")
+      # Install pnpm (puts pnpm on PATH)
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
           run_install: false
+
+      # Cache pnpm store (so installs are fast) — works without calling pnpm
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
 
       - name: Verify pnpm
         run: pnpm -v
@@ -66,7 +74,7 @@ jobs:
           echo "Frontend build completed successfully"
 
       - name: Typecheck
-        run: pnpm -C app tsconfig --version || true   # or pnpm -C app tsc --noEmit
+        run: pnpm -C app tsc --noEmit || true
 
       - name: Lint
         run: pnpm -C app next lint || true
