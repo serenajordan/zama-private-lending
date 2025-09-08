@@ -17,6 +17,9 @@ export async function getRelayer() {
   }
   return instancePromise;
 }
+export async function relayerHealthy(): Promise<boolean> {
+  try { const r = await getRelayer(); return !!r; } catch { return false; }
+}
 
 // value must be uint64 in micro-units (bigint)
 export async function encryptU64(contract: string, user: string, value: bigint) {

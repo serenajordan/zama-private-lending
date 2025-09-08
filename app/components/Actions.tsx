@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { getPool, getToken } from "@/lib/contracts";
 import { toU64Units } from "@/lib/amount";
-import { encryptU64 } from "@/lib/relayer";
+import { encryptU64, relayerHealthy } from "@/lib/relayer";
 import { getTokenDecimals } from "@/lib/tokenMeta";
 import { getFaucetMax } from "@/lib/faucetLimit";
 import { getSigner, getUserAddress } from "../lib/ethers";
@@ -161,6 +161,9 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
         _decimals = info.decimals;
       } catch (e) {
         console.warn("faucet max probe failed", e);
+      }
+      if (!(await relayerHealthy())) {
+        showToast(toast.error("Relayer is down or unreachable. Some actions are disabled."));
       }
     })();
   }, []);
