@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { getPool, getToken } from "@/lib/contracts";
 import { toU64Units } from "@/lib/amount";
 import { encryptU64 } from "@/lib/relayer";
 import { getTokenDecimals } from "@/lib/tokenMeta";
+import { getFaucetMax } from "@/lib/faucetLimit";
 import { getSigner, getUserAddress } from "../lib/ethers";
 import { useToast, toast } from "./Toast";
 
@@ -151,6 +152,19 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
   };
 
   let _decimals = 18;
+  const [faucetMax, setFaucetMax] = useState<string>("");
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = await getFaucetMax();
+        setFaucetMax(info.maxHuman);
+        _decimals = info.decimals;
+      } catch (e) {
+        console.warn("faucet max probe failed", e);
+      }
+    })();
+  }, []);
+
   async function ensureDecimals() {
     if (_decimals === null || _decimals === undefined) {
       _decimals = await getTokenDecimals();
@@ -173,6 +187,13 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       const tokenContract = await getToken()
       const d = await ensureDecimals();
       const v = toU64Units(amount, d);
+      if (faucetMax) {
+        const max = toU64Units(faucetMax, d);
+        if (v > max) {
+          showToast(toast.error("Amount exceeds faucet limit", `Maximum allowed: ${faucetMax}`));
+          return;
+        }
+      }
       const tx = await tokenContract.faucet(v);
       
       showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
@@ -368,7 +389,7 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       
       {/* Faucet */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h3 className="text-lg font-semibold mb-4">🎯 Faucet</h3>
+        <h3 className="text-lg font-semibold mb-4">🎯 Faucet {faucetMax && <span className="text-xs text-gray-500">(max {faucetMax})</span>}</h3>
         <div className="flex gap-2">
           <input
             type="number"
