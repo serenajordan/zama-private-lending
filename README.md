@@ -6,8 +6,8 @@ A confidential lending protocol built on Zama's fhEVM, enabling private DeFi ope
 
 ## Deployed Addresses (Sepolia)
 
-- **ConfidentialUSD Token**: `0xC7897006FAf7241C645380617Ce45740aa606436`
-- **PrivateLendingPool**: `0xB114F5Eb96D7CC5ce5bD26Abd71A5ED5da9dE535`
+- **ConfidentialUSD Token**: `0xBcbfe2410353DFEdc057582FBc0Fa2915580436E`
+- **PrivateLendingPool**: `0x0aF0d8e964CbFb0ACf10F82567DEc20405cc214a`
 
 ## What's Private vs Public
 

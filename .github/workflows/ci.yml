@@ -63,8 +63,8 @@ jobs:
 
       - name: Build frontend
         env:
-          NEXT_PUBLIC_TOKEN: 0x0000000000000000000000000000000000000000
-          NEXT_PUBLIC_POOL:  0x0000000000000000000000000000000000000000
+          NEXT_PUBLIC_TOKEN: 0xBcbfe2410353DFEdc057582FBc0Fa2915580436E
+          NEXT_PUBLIC_POOL:  0x0aF0d8e964CbFb0ACf10F82567DEc20405cc214a
         run: |
           echo "Building frontend..."
           pnpm --filter app build
