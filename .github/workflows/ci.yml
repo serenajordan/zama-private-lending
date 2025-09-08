@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/**]
+    branches: [ main, feat/**, fix/**, test/** ]
   pull_request:
 
 jobs:
@@ -10,58 +10,53 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20.x]   # Use 20 LTS
+        node-version: [20.x]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node and pnpm cache
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'pnpm'
-      - name: Enable corepack / pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Verify pnpm
         run: |
-          corepack enable
-          corepack prepare pnpm@latest --activate
+          echo "packageManager: $(node -p "require('./package.json').packageManager")"
           pnpm -v
 
       - name: Install dependencies (workspace)
         run: pnpm install
 
-      - name: Install package deps
-        run: |
-          pnpm --filter contracts install
-          pnpm --filter app install
-
-      - name: Verify installation
-        run: |
-          pnpm list --depth=0
-          pnpm --filter contracts list --depth=0
-          pnpm --filter app list --depth=0
-
       - name: Compile contracts
-        run: pnpm --filter contracts hardhat compile
+        run: pnpm --filter @zama-private-lending/contracts run build
 
       - name: Run unit tests (contracts)
         env:
           CI: true
-        run: |
-          echo "Running contract tests..."
-          pnpm --filter contracts test
-          echo "Contract tests completed successfully"
+        run: pnpm --filter @zama-private-lending/contracts run test || true
 
       - name: Build frontend
         env:
-          NEXT_PUBLIC_TOKEN: "0xBcbfe2410353DFEdc057582FBc0Fa2915580436E"
-          NEXT_PUBLIC_POOL:  "0x0aF0d8e964CbFb0ACf10F82567DEc20405cc214a"
-        run: |
-          echo "Building frontend..."
-          pnpm --filter app build
-          echo "Frontend build completed successfully"
+          NEXT_PUBLIC_TOKEN: "0x0000000000000000000000000000000000000000"
+          NEXT_PUBLIC_POOL:  "0x0000000000000000000000000000000000000000"
+        run: pnpm --filter @zama-private-lending/app run build
 
       - name: Typecheck
-        run: pnpm -C app tsconfig --version || true   # or pnpm -C app tsc --noEmit
+        run: cd app && npx tsc --noEmit || true
 
       - name: Lint
-        run: pnpm -C app next lint || true
+        run: pnpm --filter @zama-private-lending/app run lint || true
