@@ -35,7 +35,7 @@ export default function RootLayout({
                 window.__fheCheck = ${async function () {
                   // dynamically import to avoid breaking SSR
                   try {
-                    const m = await import("/lib/contracts");
+                    const m = await import("@/lib/contracts");
                     if (!m || !m.debugCodes) { console.log("debug module not ready"); return; }
                     const info = await m.debugCodes();
                     console.log("FHE Debug:", info);
