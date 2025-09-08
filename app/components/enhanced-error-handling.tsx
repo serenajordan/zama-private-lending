@@ -1,6 +1,6 @@
 "use client"
 
-import { useToast } from "@/lib/use-toast"
+import { useToast } from "@/hooks/use-toast"
 
 // Enhanced error types for DeFi operations
 export type DeFiError =

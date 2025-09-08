@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Shield, Lock, Eye, Calculator, Info, ExternalLink } from "lucide-react"
-import { useMediaQuery } from "@/lib/use-mobile"
+import { useMediaQuery } from "@/hooks/use-mobile"
 
 interface PrivacyModalProps {
   children: React.ReactNode

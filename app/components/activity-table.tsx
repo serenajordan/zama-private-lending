@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Copy, ExternalLink, Filter, Search, Calendar, Activity } from "lucide-react"
-import { useToast } from "@/lib/use-toast"
+import { useToast } from "@/hooks/use-toast"
 
 interface Transaction {
   id: string
