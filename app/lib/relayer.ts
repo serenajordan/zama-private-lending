@@ -30,12 +30,10 @@ export const getRelayer = async () => {
     if (typeof window === "undefined" || !createInstance) {
       // Server-side or FHEVM not available - return mock instance
       fhevmInstance = {
-        createEncryptedInput: () => ({ encryptedValue: "0x" }),
+        createEncryptedInput: () => ({ add64: (_: bigint) => {}, encrypt: async () => ({ handles: ["0x"], inputProof: "0x" }) }),
         publicDecrypt: async () => ({}),
         userDecrypt: async () => ({}),
         generateKeypair: async () => ({ privateKey: "0x1", publicKey: "0x2" }),
-        add64: async (input: any) => input,
-        encrypt: async (input: any) => input.encryptedValue || "0x",
       };
     } else {
       try {
@@ -44,12 +42,10 @@ export const getRelayer = async () => {
         console.error("Failed to create FHEVM instance:", error);
         // Fallback to mock instance for development
         fhevmInstance = {
-          createEncryptedInput: () => ({ encryptedValue: "0x" }),
+          createEncryptedInput: () => ({ add64: (_: bigint) => {}, encrypt: async () => ({ handles: ["0x"], inputProof: "0x" }) }),
           publicDecrypt: async () => ({}),
           userDecrypt: async () => ({}),
           generateKeypair: async () => ({ privateKey: "0x1", publicKey: "0x2" }),
-          add64: async (input: any) => input,
-          encrypt: async (input: any) => input.encryptedValue || "0x",
         };
       }
     }
@@ -57,32 +53,17 @@ export const getRelayer = async () => {
   return fhevmInstance;
 };
 
-// Helper function to encrypt uint64 values
-export const encrypt64 = async (
+// Helper function to encrypt uint64 values (bigint, micro-units)
+export const encryptU64 = async (
   contract: string,
   user: string,
   value: bigint
-): Promise<string> => {
-  try {
-    const instance = await getRelayer();
-    
-    // Create encrypted input using FHEVM
-    const encryptedInput = await instance.createEncryptedInput(
-      contract,
-      user,
-      value.toString()
-    );
-    
-    // Add 64-bit encryption and get the encrypted value
-    const encrypted = await instance.add64(encryptedInput);
-    const encryptedValue = await instance.encrypt(encrypted);
-    
-    return encryptedValue;
-  } catch (error) {
-    console.error("Encryption failed:", error);
-    // Fallback for development - return placeholder
-    return `0x${value.toString(16).padStart(16, '0')}`;
-  }
+): Promise<{ handles: string[]; inputProof: string }> => {
+  const instance = await getRelayer();
+  const buf = instance.createEncryptedInput(contract, user);
+  // add64 must accept bigint
+  buf.add64(value);
+  return await buf.encrypt();
 };
 
 // Helper function to decrypt user position handles

@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { ethers } from "ethers";
 import { getPool, getToken } from "@/lib/contracts";
-import { encrypt64 } from "../lib/relayer";
+import { toU64Micro } from "@/lib/amount";
+import { encryptU64 } from "@/lib/relayer";
 import { getSigner, getUserAddress } from "../lib/ethers";
 import { useToast, toast } from "./Toast";
 
@@ -161,15 +162,8 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       
       const signer = await getSigner();
       const tokenContract = await getToken()
-      const userAddress = await getUserAddress();
-      
-      // Convert to token units (6 decimals) for the contract
-      const tokenAmount = Math.floor(Number(validation.parsedAmount!) * 1000000); // 6 decimals
-      if (tokenAmount > Number.MAX_SAFE_INTEGER) {
-        throw new Error("Amount too large for uint64");
-      }
-      
-      const tx = await tokenContract.faucet(tokenAmount);
+      const v = toU64Micro(amount);
+      const tx = await tokenContract.faucet(v);
       
       showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
@@ -206,27 +200,18 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       const poolContract = await getPool()
       const userAddress = await getUserAddress();
       
-      const depositAmount = validation.parsedAmount!;
+      const v = toU64Micro(amount);
       
-      // Check user's token balance
-      const userBalance = await tokenContract.balanceOf(userAddress);
-      if (userBalance < depositAmount) {
-        throw new Error(`Insufficient balance. You have ${ethers.formatEther(userBalance)} cUSD, trying to deposit ${ethers.formatEther(depositAmount)} cUSD`);
-      }
-      
-      // First, ensure the pool has allowance to spend user's tokens
+      // First, ensure the pool has allowance to pull tokens if needed (keeping current ERC20 path for now)
       const currentAllowance = await tokenContract.allowance(userAddress, poolAddress);
-      
-      if (currentAllowance < depositAmount) {
+      if (currentAllowance < v) {
         showToast(toast.info("Setting Allowance", "Approving tokens for deposit"));
-        const approveTx = await tokenContract.approve(poolAddress, depositAmount);
+        const approveTx = await tokenContract.approve(poolAddress, v);
         await approveTx.wait();
       }
       
-      showToast(toast.info("Submitting Deposit", "Sending transaction to pool"));
-      
-      // Now call deposit with explicit gas limit
-      const tx = await poolContract.deposit(depositAmount, { gasLimit: 500000 });
+      const { handles, inputProof } = await encryptU64(poolAddress, userAddress, v);
+      const tx = await poolContract.depositFunds(handles[0], inputProof);
       
       showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
@@ -259,11 +244,11 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       showToast(toast.info("Encrypting...", "Preparing borrow request"));
       
       const signer = await getSigner();
-      const poolContract = await getPool()
-      
-      // For now, call borrow directly with the amount
-      // In production, this would use encrypted values
-      const tx = await poolContract.borrow(validation.parsedAmount!);
+      const poolContract = await getPool();
+      const addr = await getUserAddress();
+      const v = toU64Micro(amount);
+      const { handles, inputProof } = await encryptU64(poolAddress, addr, v);
+      const tx = await poolContract.borrow(handles[0], inputProof);
       
       showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
@@ -296,24 +281,11 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
       showToast(toast.info("Encrypting...", "Preparing repay request"));
       
       const signer = await getSigner();
-      const tokenContract = await getToken()
-      const poolContract = await getPool()
-      
-      const repayAmount = validation.parsedAmount!;
-      
-      // First, ensure the pool has allowance to spend user's tokens
-      const currentAllowance = await tokenContract.allowance(await getUserAddress(), poolAddress);
-      
-      if (currentAllowance < repayAmount) {
-        showToast(toast.info("Setting Allowance", "Approving tokens for repay"));
-        const approveTx = await tokenContract.approve(poolAddress, repayAmount);
-        await approveTx.wait();
-      }
-      
-      showToast(toast.info("Submitting Repay", "Sending transaction to pool"));
-      
-      // Now call repay
-      const tx = await poolContract.repay(repayAmount);
+      const poolContract = await getPool();
+      const addr = await getUserAddress();
+      const v = toU64Micro(amount);
+      const { handles, inputProof } = await encryptU64(poolAddress, addr, v);
+      const tx = await poolContract.repay(handles[0], inputProof);
       
       showToast(toast.info("Submitted Transaction", `Hash: ${tx.hash.slice(0, 10)}...`));
       await tx.wait();
