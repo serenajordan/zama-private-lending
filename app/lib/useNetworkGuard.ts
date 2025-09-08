@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import { useToast, toast } from "../components/Toast";
+import { useToast, toast } from "@/components/ui/use-toast";
 
 const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111 in hex
 const SEPOLIA_CHAIN_ID_DECIMAL = 11155111;
@@ -18,7 +18,7 @@ export function useNetworkGuard(): NetworkState {
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
   const [currentChainId, setCurrentChainId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { showToast } = useToast();
+  const { toast } = useToast();
 
   const checkNetwork = async () => {
     if (typeof window === "undefined" || !window.ethereum) {
@@ -43,26 +43,39 @@ export function useNetworkGuard(): NetworkState {
 
   const switchToSepolia = async () => {
     if (typeof window === "undefined" || !window.ethereum) {
-      showToast(toast.error("Wallet Not Available", "Please install MetaMask"));
+      toast({
+        title: "Wallet Not Available",
+        description: "Please install MetaMask",
+        variant: "destructive",
+      });
       return;
     }
 
     try {
-      showToast(toast.info("Switching Network", "Switching to Sepolia testnet..."));
+      toast({
+        title: "Switching Network",
+        description: "Switching to Sepolia testnet...",
+      });
       
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: SEPOLIA_CHAIN_ID }],
       });
       
-      showToast(toast.success("Network Switched", "Successfully connected to Sepolia"));
+      toast({
+        title: "Network Switched",
+        description: "Successfully connected to Sepolia",
+      });
     } catch (error: any) {
       console.error("Error switching network:", error);
       
       // If Sepolia is not added, add it
       if (error.code === 4902) {
         try {
-          showToast(toast.info("Adding Network", "Adding Sepolia testnet to your wallet..."));
+          toast({
+            title: "Adding Network",
+            description: "Adding Sepolia testnet to your wallet...",
+          });
           
           await window.ethereum.request({
             method: "wallet_addEthereumChain",
@@ -81,13 +94,24 @@ export function useNetworkGuard(): NetworkState {
             ],
           });
           
-          showToast(toast.success("Network Added", "Sepolia testnet added successfully"));
+          toast({
+            title: "Network Added",
+            description: "Sepolia testnet added successfully",
+          });
         } catch (addError: any) {
           console.error("Error adding network:", addError);
-          showToast(toast.error("Network Error", "Failed to add Sepolia network"));
+          toast({
+            title: "Network Error",
+            description: "Failed to add Sepolia network",
+            variant: "destructive",
+          });
         }
       } else {
-        showToast(toast.error("Network Error", "Failed to switch to Sepolia network"));
+        toast({
+          title: "Network Error",
+          description: "Failed to switch to Sepolia network",
+          variant: "destructive",
+        });
       }
     }
   };
@@ -102,9 +126,16 @@ export function useNetworkGuard(): NetworkState {
         setIsCorrectNetwork(chainId === SEPOLIA_CHAIN_ID);
         
         if (chainId === SEPOLIA_CHAIN_ID) {
-          showToast(toast.success("Network Connected", "Connected to Sepolia testnet"));
+          toast({
+            title: "Network Connected",
+            description: "Connected to Sepolia testnet",
+          });
         } else {
-          showToast(toast.warning("Wrong Network", "Please switch to Sepolia testnet"));
+          toast({
+            title: "Wrong Network",
+            description: "Please switch to Sepolia testnet",
+            variant: "destructive",
+          });
         }
       };
 
