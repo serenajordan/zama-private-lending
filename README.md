@@ -1,135 +1,51 @@
 # Zama Private Lending Protocol
+[![CI](https://img.shields.io/github/actions/workflow/status/${GITHUB_REPOSITORY:-serenajordan/zama-private-lending}/ci.yml?label=CI)](../../actions)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](./LICENSE)
 
-![CI](https://github.com/serenajordan/zama-private-lending/actions/workflows/ci.yml/badge.svg)
+Confidential lending on Zama's **fheVM**. Deposits, borrows, and repayments are done with **encrypted amounts**; balances/positions are unreadable on-chain.
 
-A confidential lending protocol built on Zama's fhEVM, enabling private DeFi operations with fully homomorphic encryption.
+## Live
+- **App**: _TBD (Vercel)_  
+- **Network**: Sepolia  
+- **Contracts**: see "Deployed Addresses" below.
 
-## Deployed Addresses (Sepolia)
-
-- **ConfidentialUSD Token**: `0xBcbfe2410353DFEdc057582FBc0Fa2915580436E`
-- **PrivateLendingPool**: `0x0aF0d8e964CbFb0ACf10F82567DEc20405cc214a`
-
-## What's Private vs Public
-
-| Data Type | Privacy Level | Implementation |
-|-----------|---------------|----------------|
-| Token balances | 🔒 **Private (FHE)** | Encrypted on-chain, only user can decrypt |
-| Deposit/borrow amounts | 🔒 **Private (FHE)** | Encrypted during execution |
-| Health flag | 🌐 **Public bool only** | Boolean liquidation status |
-| Liquidation action | 🌐 **Public, amounts private** | Action visible, amounts encrypted |
-
-## Quick Start
-
-### 1. Faucet
-Get demo cUSD tokens to start interacting with the protocol.
-
-### 2. Deposit
-Lock encrypted tokens as collateral for borrowing.
-
-### 3. Borrow
-Take out loans against your collateral (up to 70% LTV).
-
-### 4. Repay
-Pay back loans to unlock your collateral.
-
-> **⚠️ Limitations / Demo Only**: This is a demonstration protocol. Do not use with real funds. The FHEVM infrastructure is still in development.
-
-## Prerequisites
-
-- Node.js 18+
-- PNPM 8+
-- MetaMask with Sepolia testnet configured
-
-## Installation
-
+## Quick start
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd zama-private-lending
-
-# Install dependencies
 pnpm install
-
-# Set up environment variables
-cp contracts/.env.example contracts/.env
-cp app/.env.local.example app/.env.local
-# Edit .env files with your private key and RPC URL
+cp app/.env.local.example app/.env.local   # fill TOKEN/POOL, optional RELAYER_URL
+pnpm -C app dev
 ```
-
-## Development
-
-```bash
-# Start the Next.js app
-pnpm dev
-
-# Run contract tests
-pnpm test
-
-# Deploy to Sepolia
-pnpm deploy:sepolia
-```
-
-## Available Scripts
-
-- `pnpm dev` - Start development server
-- `pnpm build` - Build production app
-- `pnpm test` - Run contract tests
-- `pnpm deploy:sepolia` - Deploy contracts to Sepolia
-
-## HCU Notes
-
-| Component | HCU Usage | Notes |
-|-----------|-----------|-------|
-| FHE.add() | 1 HCU | Addition operations |
-| FHE.sub() | 1 HCU | Subtraction operations |
-| FHE.mul() | 2 HCU | Multiplication operations |
-| FHE.div() | 3 HCU | Division operations |
-| FHE.le() | 1 HCU | Less than or equal comparison |
-| FHE.select() | 1 HCU | Conditional selection |
-| FHE.fromExternal() | 5 HCU | External input decryption |
-| FHE.isSenderAllowed() | 1 HCU | ACL validation |
-
-**Total estimated HCU per transaction**: 15-25 HCU depending on operation complexity.
 
 ## Architecture
+See [docs/architecture.md](docs/architecture.md).
 
+## What's FHE here?
+- Encrypted ERC20 balances (TFHE).
+- Encrypted deposits & debt.
+- On-chain FHE comparisons for LTV / health factor.
+- Client-side key registration + encrypted input proofs via relayer.
+
+## Test & CI
+```bash
+pnpm -C contracts test
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Next.js App  │    │  FHEVM Relayer   │    │  Smart Contracts│
-│                 │    │                  │    │                 │
-│ - Dashboard     │◄──►│ - Input Registry │◄──►│ - Confidential  │
-│ - Actions       │    │ - User Decrypt   │    │   USD Token     │
-│ - UI Components │    │ - Proof Gen      │    │ - Lending Pool  │
-- LTV is enforced in encrypted domain using FHE.select (no data-dependent revert).
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
+CI compiles, runs tests, and builds the app on Node 20.
 
-## Security Features
+## Demo script
+1. Connect wallet (Sepolia) → **Register** (button in UI).
+2. **Faucet** ≤ max.
+3. **Deposit**; Dashboard shows encrypted on-chain state and decrypted client metrics.
+4. **Borrow** (<= 70% LTV) → **Repay** part.
 
-- **Encrypted state**: All sensitive data is encrypted on-chain
-- **Zero-knowledge proofs**: Validates operations without revealing inputs
-- **Access control**: FHEVM handles permission management
-- **Error handling**: Structured error reporting with timestamps
+## Deployed Addresses (Sepolia)
+- Token: `0x...`  
+- Pool:  `0x...`
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
-
-## License
-
-BSD-3-Clause-Clear
-
-## Resources
-
-- [Zama fhEVM Documentation](https://docs.zama.ai/fhevm/)
-- [FHEVM Solidity Library](https://docs.zama.ai/fhevm/solidity/)
-- [Relayer SDK](https://docs.zama.ai/fhevm/relayer/)
-- [Sepolia Testnet](https://sepolia.dev/)
-
-### Faucet
-Mint demo cUSD to interact with the pool.
-
+## Submission checklist
+- ✅ README + Architecture
+- ✅ CI
+- ✅ FHE-specific code (not a wrapper)
+- ✅ Commits this month
+- ⏳ Tests with FHE paths
+- ⏳ Hosted demo (Vercel)
+- ⏳ Video walkthrough

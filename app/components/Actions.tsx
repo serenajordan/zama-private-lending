@@ -151,7 +151,7 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
     }
   };
 
-  let _decimals = 18;
+  let _decimals: number | null = null;
   const [faucetMax, setFaucetMax] = useState<string>("");
   useEffect(() => {
     (async () => {
