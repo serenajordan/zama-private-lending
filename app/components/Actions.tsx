@@ -153,6 +153,7 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
 
   let _decimals: number | null = null;
   const [faucetMax, setFaucetMax] = useState<string>("");
+  const [liquidateAddr, setLiquidateAddr] = useState<string>("");
   useEffect(() => {
     (async () => {
       try {
@@ -343,6 +344,41 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
     }
   };
 
+  async function handleAccrue() {
+    try {
+      const s = await getSigner();
+      const p = await getPool();
+      const me = await s.getAddress();
+      const tx = await p.accrue(me);
+      await tx.wait();
+      showToast(toast.success("Confirmed", "Accrued interest"));
+    } catch (e:any) {
+      showToast(toast.error("Accrue Failed", `Accrue error: ${e?.message || e}`));
+    }
+  }
+
+  async function handleLiquidate() {
+    try {
+      if (!ethers.isAddress(liquidateAddr)) { 
+        showToast(toast.error("Invalid Address", "Enter address to liquidate")); 
+        return; 
+      }
+      const s = await getSigner();
+      const addr = await s.getAddress();
+      const d = await ensureDecimals();
+      // repay a small fixed encrypted amount (e.g. 0.001) during liquidation
+      const v = toU64Units("0.001", d);
+      try { await relayerRegister(); } catch {}
+      const { handles, inputProof } = await encryptU64(poolAddress, addr, v);
+      const p = await getPool();
+      const tx = await p.liquidate(liquidateAddr, handles[0], inputProof);
+      await tx.wait();
+      showToast(toast.success("Confirmed", "Liquidation attempted"));
+    } catch (e:any) {
+      showToast(toast.error("Liquidation Failed", `Liquidation error: ${e?.message || e}`));
+    }
+  }
+
   const handleTransfer = async () => {
     const amountValidation = validateAmount(amount);
     if (!amountValidation.isValid) {
@@ -491,6 +527,34 @@ export default function Actions({ tokenAddress, poolAddress }: ActionsProps) {
             {pendingActions.has("repay") ? "Repaying..." : "Repay"}
           </button>
         </div>
+      </div>
+
+      {/* Accrue Interest */}
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h3 className="text-lg font-semibold mb-4">⏱️ Accrue Interest</h3>
+        <button 
+          onClick={handleAccrue}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          Accrue
+        </button>
+      </div>
+
+      {/* Liquidation */}
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h3 className="text-lg font-semibold mb-4">⚠️ Liquidate</h3>
+        <input
+          placeholder="0xLiquidatee"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+          value={liquidateAddr}
+          onChange={(e)=>setLiquidateAddr(e.target.value)}
+        />
+        <button 
+          onClick={handleLiquidate}
+          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+        >
+          Liquidate
+        </button>
       </div>
 
       {/* Transfer */}
