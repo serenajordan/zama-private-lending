@@ -1,0 +1,10 @@
+// Barrel file for main components
+export { Dashboard } from './dashboard'
+export { Navigation } from './navigation'
+export { SystemBanner } from './system-banner'
+export { ActionsPanel } from './actions-panel'
+export { ActivityTable } from './activity-table'
+export { ModeToggle } from './mode-toggle'
+export { ThemeProvider } from './theme-provider'
+export { PrivacyModal } from './privacy-modal'
+export { useEnhancedErrorHandling } from './enhanced-error-handling'
