@@ -1,7 +1,20 @@
+import { toast } from "sonner";
+
 let instancePromise: any | null = null;
 
-// Normalize relayer URL - trim whitespace and remove trailing slashes
-export const RELAYER_URL = (process.env.NEXT_PUBLIC_RELAYER_URL || '').trim().replace(/\/+$/, '');
+// Single source of truth for URL
+export function normalizeUrl(raw?: string | null): string | null {
+  if (!raw) return null;
+  let u = raw.trim();
+  if (!u) return null;
+  // add protocol if missing
+  if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+  // strip trailing slash
+  u = u.replace(/\/+$/, "");
+  return u;
+}
+
+export const RELAYER_URL = normalizeUrl(process.env.NEXT_PUBLIC_RELAYER_URL ?? null);
 
 async function ensurePolyfills() {
   // Some libs expect Node globals in the browser
@@ -20,20 +33,42 @@ export async function getRelayer() {
   }
   return instancePromise;
 }
-export async function relayerHealthy(url?: string): Promise<boolean> {
-  const targetUrl = url || RELAYER_URL;
-  if (!targetUrl) {
-    console.warn('[relayer] No relayer URL configured');
-    return false;
-  }
-  
+
+export async function relayerHealthy(urlOverride?: string, timeoutMs = 3500): Promise<boolean> {
+  const url = normalizeUrl(urlOverride) ?? RELAYER_URL;
+  if (!url) return false;
+
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const response = await fetch(`${targetUrl}/health`);
-    return response.ok;
-  } catch (error) {
-    console.warn('[relayer] Health check failed:', error);
+    const res = await fetch(`${url}/health`, { signal: controller.signal, cache: "no-store" });
+    if (!res.ok) return false;
+    // Many relayers return { ok: true } or 200/"ok"
+    return true;
+  } catch (e) {
+    console.warn("[relayer] health check failed", e);
     return false;
+  } finally {
+    clearTimeout(t);
   }
+}
+
+// Convenience guard to run before encryption/tx calls
+export async function ensureRelayerAvailable(): Promise<string> {
+  const url = RELAYER_URL;
+  if (!url) {
+    const msg = "Relayer URL not configured. Set NEXT_PUBLIC_RELAYER_URL in app/.env.local";
+    toast.error(msg);
+    throw new Error(msg);
+  }
+  const ok = await relayerHealthy(url);
+  if (!ok) {
+    const msg = `Relayer unavailable at: ${url}. Check DNS, URL and /health.`;
+    toast.error(msg);
+    throw new Error(msg);
+  }
+  return url;
 }
 
 export async function register(): Promise<void> {

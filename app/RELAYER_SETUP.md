@@ -14,8 +14,9 @@ NEXT_PUBLIC_CHAIN_ID=11155111
 NEXT_PUBLIC_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 
 # FHEVM Relayer Configuration
-# TODO: Replace with actual Sepolia relayer URL (no trailing slash, not /keys)
-NEXT_PUBLIC_RELAYER_URL=<FILL ME: correct base relayer URL for Sepolia, no trailing slash, not /keys>
+# Required – base URL of the FHE relayer (no trailing slash)
+# Example: https://relayer.sepolia.zama.ai
+NEXT_PUBLIC_RELAYER_URL=https://<your-relayer-host>
 
 # WalletConnect (can be dummy in dev)
 NEXT_PUBLIC_WC_PROJECT_ID=YOUR_PROJECT_ID
@@ -33,8 +34,28 @@ curl -sS "$NEXT_PUBLIC_RELAYER_URL/health"
 curl -sS "$NEXT_PUBLIC_RELAYER_URL/keys/tfhe"
 ```
 
-## Expected Behavior
+## Expected Console Output
 
-- The app will log `[relayer] healthy true/false` in the browser console on load
-- The `encryptU64` function will log the effective relayer URL being used
-- Faucet/deposit/borrow/repay actions will work once the relayer URL is correctly configured
+In the browser console on page load, you should see:
+
+```
+[relayer] healthy true url: https://your-relayer-url
+```
+
+If you see `false` or `(none)`, check your `NEXT_PUBLIC_RELAYER_URL` configuration.
+
+## Error Handling
+
+The app now includes proper relayer validation:
+
+- **Missing URL**: Shows "Relayer URL not configured. Set NEXT_PUBLIC_RELAYER_URL in app/.env.local"
+- **Unreachable URL**: Shows "Relayer unavailable at: [url]. Check DNS, URL and /health."
+- **Actions are gated**: Faucet/Deposit/Borrow/Repay will not execute if relayer is unhealthy
+
+## URL Normalization
+
+The relayer URL is automatically normalized:
+- Adds `https://` protocol if missing
+- Removes trailing slashes
+- Trims whitespace
+- Validates format before use
