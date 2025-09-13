@@ -1,5 +1,8 @@
 let instancePromise: any | null = null;
 
+// Normalize relayer URL - trim whitespace and remove trailing slashes
+export const RELAYER_URL = (process.env.NEXT_PUBLIC_RELAYER_URL || '').trim().replace(/\/+$/, '');
+
 async function ensurePolyfills() {
   // Some libs expect Node globals in the browser
   // @ts-ignore
@@ -17,8 +20,20 @@ export async function getRelayer() {
   }
   return instancePromise;
 }
-export async function relayerHealthy(): Promise<boolean> {
-  try { const r = await getRelayer(); return !!r; } catch { return false; }
+export async function relayerHealthy(url?: string): Promise<boolean> {
+  const targetUrl = url || RELAYER_URL;
+  if (!targetUrl) {
+    console.warn('[relayer] No relayer URL configured');
+    return false;
+  }
+  
+  try {
+    const response = await fetch(`${targetUrl}/health`);
+    return response.ok;
+  } catch (error) {
+    console.warn('[relayer] Health check failed:', error);
+    return false;
+  }
 }
 
 export async function register(): Promise<void> {
@@ -33,6 +48,7 @@ export async function relayerRegister(): Promise<void> {
 
 // value must be uint64 in micro-units (bigint)
 export async function encryptU64(contract: string, user: string, value: bigint) {
+  console.info('[relayer] Using relayer URL:', RELAYER_URL);
   const relayer = await getRelayer();
   const buf = relayer.createEncryptedInput(contract, user);
   buf.add64(value);
