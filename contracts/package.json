@@ -15,6 +15,7 @@
     "@zama-fhe/oracle-solidity": "0.0.4-0"
   },
   "devDependencies": {
+    "fhevm": "^0.6.0",
     "@fhevm/hardhat-plugin": "0.0.1-6",
     "@fhevm/mock-utils": "0.0.1-6",
     "@nomicfoundation/hardhat-ethers": "^3.0.0",
