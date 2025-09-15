@@ -35,7 +35,7 @@ const nextConfig = {
       
       // Provide global and self polyfills
       config.plugins.push(
-        new webpack.DefinePlugin({
+        new (require('webpack')).DefinePlugin({
           global: 'globalThis',
           self: 'globalThis',
         })
