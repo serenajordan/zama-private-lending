@@ -60,8 +60,15 @@ export function useActions() {
       }
       
       const pool = await getPool();
+      const token = await getToken();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
+      
+      // First, approve the pool contract to spend tokens
+      toast.info('Approving tokens...');
+      const approveTx = await token.approve(pool.target, u64);
+      await approveTx.wait();
+      toast.success('Approval confirmed');
       
       // Encrypt the amount for the deposit call
       const enc = await encryptU64(u64);
