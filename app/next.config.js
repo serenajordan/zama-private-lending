@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const webpack = require('webpack');
+
 const nextConfig = {
   // Safe dev settings to prevent 404s for _next/static assets
   reactStrictMode: true,
@@ -24,12 +26,20 @@ const nextConfig = {
       /Circular dependency between chunks with runtime/,
     ];
     
-    // Add global polyfill for browser environment
+    // Add polyfills for browser environment
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         global: require.resolve('global'),
       };
+      
+      // Provide global and self polyfills
+      config.plugins.push(
+        new webpack.DefinePlugin({
+          global: 'globalThis',
+          self: 'globalThis',
+        })
+      );
     }
     
     return config;

@@ -1,4 +1,4 @@
-import './polyfills';
+import '../polyfills';
 import type React from "react"
 import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
