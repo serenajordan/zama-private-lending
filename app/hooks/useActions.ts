@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { getToken, getPool } from '@/lib/contracts';
 import { getTokenDecimals } from '@/lib/tokenMeta';
-import { toU64Units } from '@/lib/amount';
+import { toU64Units, fromUnits } from '@/lib/amount';
 import { encryptU64, relayerHealthy } from '@/lib/relayer';
 import { useAccount } from 'wagmi';
 
@@ -38,6 +38,15 @@ export function useActions() {
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
       
+      // Validate faucet amount - reasonable limits
+      const faucetAmount = parseFloat(humanAmount);
+      if (faucetAmount <= 0) {
+        throw new Error('Faucet amount must be greater than 0.');
+      }
+      if (faucetAmount > 1000) {
+        throw new Error('Faucet amount cannot exceed 1000 cUSD per request.');
+      }
+      
       // Encrypt the amount for the faucet call
       const enc = await encryptU64(u64);
       
@@ -66,6 +75,21 @@ export function useActions() {
       const token = await getToken();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
+      
+      // Validate deposit amount
+      const depositAmount = parseFloat(humanAmount);
+      if (depositAmount <= 0) {
+        throw new Error('Deposit amount must be greater than 0.');
+      }
+      
+      // Check if user has enough token balance to deposit
+      const rawBalance = await token.balanceOf(address);
+      const tokenBalance = fromUnits(rawBalance, decimals);
+      const balanceAmount = parseFloat(tokenBalance);
+      
+      if (depositAmount > balanceAmount) {
+        throw new Error(`Insufficient token balance. You have ${tokenBalance} cUSD but trying to deposit ${humanAmount} cUSD.`);
+      }
       
       // First, approve the pool contract to spend tokens
       toast.info('Approving tokens...');
@@ -101,6 +125,33 @@ export function useActions() {
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
       
+      // Validate borrow amount
+      const borrowAmount = parseFloat(humanAmount);
+      if (borrowAmount <= 0) {
+        throw new Error('Borrow amount must be greater than 0.');
+      }
+      
+      // Check current position to validate borrowing capacity
+      const [rawDeposits, rawDebt] = await pool.viewMyPosition();
+      const currentDeposits = fromUnits(rawDeposits, decimals);
+      const currentDebt = fromUnits(rawDebt, decimals);
+      const depositsAmount = parseFloat(currentDeposits);
+      const debtAmount = parseFloat(currentDebt);
+      
+      // Calculate maximum borrowable amount (80% LTV)
+      const maxLtv = 0.8;
+      const maxBorrowable = depositsAmount * maxLtv;
+      const newTotalDebt = debtAmount + borrowAmount;
+      
+      if (newTotalDebt > maxBorrowable) {
+        const availableToBorrow = Math.max(0, maxBorrowable - debtAmount);
+        throw new Error(`Cannot borrow ${humanAmount} cUSD. Maximum borrowable amount is ${availableToBorrow.toFixed(2)} cUSD (80% of deposits).`);
+      }
+      
+      if (depositsAmount === 0) {
+        throw new Error('You must deposit tokens before you can borrow.');
+      }
+      
       // Encrypt the amount for the borrow call
       const enc = await encryptU64(u64);
       
@@ -129,6 +180,34 @@ export function useActions() {
       const token = await getToken();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
+      
+      // Validate repay amount
+      const repayAmount = parseFloat(humanAmount);
+      if (repayAmount <= 0) {
+        throw new Error('Repay amount must be greater than 0.');
+      }
+      
+      // Check current debt to validate repay amount
+      const [rawDeposits, rawDebt] = await pool.viewMyPosition();
+      const currentDebt = fromUnits(rawDebt, decimals);
+      const debtAmount = parseFloat(currentDebt);
+      
+      if (repayAmount > debtAmount) {
+        throw new Error(`Cannot repay ${humanAmount} cUSD. Your current debt is only ${currentDebt} cUSD.`);
+      }
+      
+      if (debtAmount === 0) {
+        throw new Error('You have no debt to repay.');
+      }
+      
+      // Check if user has enough token balance to repay
+      const rawBalance = await token.balanceOf(address);
+      const tokenBalance = fromUnits(rawBalance, decimals);
+      const balanceAmount = parseFloat(tokenBalance);
+      
+      if (repayAmount > balanceAmount) {
+        throw new Error(`Insufficient token balance. You have ${tokenBalance} cUSD but trying to repay ${humanAmount} cUSD.`);
+      }
       
       // First, approve the pool contract to spend tokens for repayment
       toast.info('Approving tokens for repayment...');
