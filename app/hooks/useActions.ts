@@ -43,9 +43,12 @@ export function useActions() {
       
       // Call faucet function with encrypted amount
       const tx = await token.faucet(enc);
-      toast.success('Faucet transaction sent');
-      await tx.wait();
-      toast.success('Faucet completed');
+      toast.success(`Faucet transaction sent! Hash: ${tx.hash.slice(0, 10)}...`);
+      const receipt = await tx.wait();
+      toast.success(`✅ Faucet completed! You received ${humanAmount} cUSD`, {
+        description: `Transaction confirmed in block ${receipt.blockNumber}`,
+        duration: 5000,
+      });
     });
   };
 
@@ -68,16 +71,19 @@ export function useActions() {
       toast.info('Approving tokens...');
       const approveTx = await token.approve(pool.target, u64);
       await approveTx.wait();
-      toast.success('Approval confirmed');
+      toast.success('✅ Token approval confirmed');
       
       // Encrypt the amount for the deposit call
       const enc = await encryptU64(u64);
       
       // Call deposit function with encrypted amount
       const tx = await pool.deposit(enc);
-      toast.success('Deposit submitted');
-      await tx.wait();
-      toast.success('Deposit confirmed');
+      toast.success(`Deposit transaction sent! Hash: ${tx.hash.slice(0, 10)}...`);
+      const receipt = await tx.wait();
+      toast.success(`🎉 Deposit successful! You deposited ${humanAmount} cUSD`, {
+        description: `Transaction confirmed in block ${receipt.blockNumber}. Your balance will update automatically.`,
+        duration: 5000,
+      });
     });
   };
 
@@ -100,9 +106,12 @@ export function useActions() {
       
       // Call borrow function with encrypted amount
       const tx = await pool.borrow(enc);
-      toast.success('Borrow submitted');
-      await tx.wait();
-      toast.success('Borrow confirmed');
+      toast.success(`Borrow transaction sent! Hash: ${tx.hash.slice(0, 10)}...`);
+      const receipt = await tx.wait();
+      toast.success(`💰 Borrow successful! You borrowed ${humanAmount} cUSD`, {
+        description: `Transaction confirmed in block ${receipt.blockNumber}. Your balance will update automatically.`,
+        duration: 5000,
+      });
     });
   };
 
@@ -125,9 +134,12 @@ export function useActions() {
       
       // Call repay function with encrypted amount
       const tx = await pool.repay(enc);
-      toast.success('Repay submitted');
-      await tx.wait();
-      toast.success('Repay confirmed');
+      toast.success(`Repay transaction sent! Hash: ${tx.hash.slice(0, 10)}...`);
+      const receipt = await tx.wait();
+      toast.success(`✅ Repay successful! You repaid ${humanAmount} cUSD`, {
+        description: `Transaction confirmed in block ${receipt.blockNumber}. Your balance will update automatically.`,
+        duration: 5000,
+      });
     });
   };
 

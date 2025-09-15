@@ -79,7 +79,10 @@ export function ActionsPanel() {
     try {
       await faucet(faucetAmount)
       setFaucetAmount("")
-      await refresh() // Refresh position data
+      // Small delay to ensure blockchain state is updated
+      setTimeout(async () => {
+        await refresh()
+      }, 1000)
     } catch (error) {
       // Error handling is done in useActions hook
     }
@@ -106,7 +109,10 @@ export function ActionsPanel() {
     try {
       await deposit(depositAmount)
       setDepositAmount("")
-      await refresh() // Refresh position data
+      // Small delay to ensure blockchain state is updated
+      setTimeout(async () => {
+        await refresh()
+      }, 1000)
     } catch (error) {
       // Error handling is done in useActions hook
     }
@@ -135,7 +141,10 @@ export function ActionsPanel() {
     try {
       await borrow(borrowAmount)
       setBorrowAmount("")
-      await refresh() // Refresh position data
+      // Small delay to ensure blockchain state is updated
+      setTimeout(async () => {
+        await refresh()
+      }, 1000)
     } catch (error) {
       // Error handling is done in useActions hook
     }
@@ -162,7 +171,10 @@ export function ActionsPanel() {
     try {
       await repay(repayAmount)
       setRepayAmount("")
-      await refresh() // Refresh position data
+      // Small delay to ensure blockchain state is updated
+      setTimeout(async () => {
+        await refresh()
+      }, 1000)
     } catch (error) {
       // Error handling is done in useActions hook
     }
