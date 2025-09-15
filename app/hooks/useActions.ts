@@ -126,8 +126,15 @@ export function useActions() {
       }
       
       const pool = await getPool();
+      const token = await getToken();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
+      
+      // First, approve the pool contract to spend tokens for repayment
+      toast.info('Approving tokens for repayment...');
+      const approveTx = await token.approve(pool.target, u64);
+      await approveTx.wait();
+      toast.success('✅ Token approval confirmed');
       
       // Encrypt the amount for the repay call
       const enc = await encryptU64(u64);
