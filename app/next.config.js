@@ -26,22 +26,6 @@ const nextConfig = {
       /Circular dependency between chunks with runtime/,
     ];
     
-    // Add polyfills for browser environment
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        global: require.resolve('global'),
-      };
-      
-      // Provide global and self polyfills
-      config.plugins.push(
-        new (require('webpack')).DefinePlugin({
-          global: 'globalThis',
-          self: 'globalThis',
-        })
-      );
-    }
-    
     return config;
   },
 }

@@ -41,8 +41,8 @@ export function useActions() {
       // Encrypt the amount for the faucet call
       const enc = await encryptU64(u64);
       
-      // Call faucet function
-      const tx = await token.faucet();
+      // Call faucet function with encrypted amount
+      const tx = await token.faucet(enc);
       toast.success('Faucet transaction sent');
       await tx.wait();
       toast.success('Faucet completed');
