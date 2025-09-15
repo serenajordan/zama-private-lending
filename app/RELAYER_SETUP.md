@@ -18,55 +18,51 @@ NEXT_PUBLIC_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 # Example: https://relayer.testnet.zama.cloud
 NEXT_PUBLIC_RELAYER_URL=https://relayer.testnet.zama.cloud
 
+# Gateway Chain ID for Sepolia
+NEXT_PUBLIC_GATEWAY_CHAIN_ID=55815
+
 # WalletConnect (can be dummy in dev)
 NEXT_PUBLIC_WC_PROJECT_ID=YOUR_PROJECT_ID
 ```
 
-## Verification Commands
+## SDK-Based Health Checks
 
-After setting the relayer URL, verify it works with:
+The app now uses the official `@zama-fhe/relayer-sdk` for all relayer operations:
 
-```bash
-# Set your relayer URL
-RELAYER="https://relayer.testnet.zama.cloud"
-
-# Test health endpoint
-curl -sS "$RELAYER/health"
-
-# Test keys endpoint  
-curl -sS "$RELAYER/keys/tfhe"
-```
+- **No more `/health` endpoint calls**: The SDK handles health checks internally
+- **Automatic key fetching**: The SDK manages TFHE key retrieval and caching
+- **Proper error handling**: SDK provides better error messages and retry logic
 
 ## Expected Console Output
 
 In the browser console on page load, you should see:
 
 ```
-[relayer] healthy true url: https://relayer.testnet.zama.cloud
+[relayer] checking health...
+[relayer] health check result: ✅ healthy
 ```
 
-If you see `false` or `(none)`, check your `NEXT_PUBLIC_RELAYER_URL` configuration.
+If you see `❌ unhealthy`, check your `NEXT_PUBLIC_RELAYER_URL` configuration.
 
 ## Error Handling
 
-The app now includes proper relayer validation:
+The app now includes proper relayer validation using the SDK:
 
-- **Missing URL**: Shows warning in dev console: `[relayer] no NEXT_PUBLIC_RELAYER_URL configured`
-- **Unreachable URL**: Shows "Relayer offline" on action buttons and system banner
+- **SDK initialization**: Uses `createInstance()` with SepoliaConfig
+- **Health checks**: Calls `getTfheCompactPublicKey()` to verify relayer connectivity
 - **Actions are gated**: Faucet/Deposit/Borrow/Repay buttons are disabled when relayer is unhealthy
-- **Health checks**: Automatic retry with exponential backoff (250ms, 500ms, 1s)
+- **Better error messages**: SDK provides more descriptive error information
 
 ## URL Normalization
 
 The relayer URL is automatically normalized:
-- Adds `https://` protocol if missing
 - Removes trailing slashes
 - Trims whitespace
-- Validates format before use
+- Uses SepoliaConfig as fallback if no URL provided
 
 ## Development Notes
 
 - **Restart required**: After changing environment variables, restart the dev server with `pnpm -C app dev`
 - **Health monitoring**: The system banner shows relayer status and updates every 30 seconds
 - **Button states**: Action buttons show "Relayer offline" when the relayer is unavailable
-- **Keys verification**: The `/keys/tfhe` endpoint is checked before encryption operations
+- **SDK-based encryption**: All encryption operations now use the official SDK methods

@@ -10,7 +10,7 @@ import { ActionsPanel } from "@/components/actions-panel"
 import { ActivityTable } from "@/components/activity-table"
 import { useAccount } from "wagmi"
 import { usePosition } from "@/hooks/usePosition"
-import { relayerHealthy, RELAYER_URL } from "@/lib/relayer"
+import { relayerHealthy } from "@/lib/relayer"
 import { useEffect } from "react"
 
 function KPICard({
@@ -172,20 +172,19 @@ export function Dashboard() {
 
   // Health check on load
   useEffect(() => {
-    let on = true;
+    let cancelled = false;
     (async () => {
-      const effectiveUrl = RELAYER_URL ?? "(none)";
-      console.log("[relayer] checking health for URL:", effectiveUrl);
+      console.log("[relayer] checking health...");
       
       const ok = await relayerHealthy();
-      if (on) {
-        console.log("[relayer] health check result:", ok ? "✅ healthy" : "❌ unhealthy", "| URL:", effectiveUrl);
-        if (!ok && effectiveUrl !== "(none)") {
+      if (!cancelled) {
+        console.log("[relayer] health check result:", ok ? "✅ healthy" : "❌ unhealthy");
+        if (!ok) {
           console.warn("[relayer] relayer is unhealthy - actions will be disabled");
         }
       }
     })();
-    return () => { on = false; };
+    return () => { cancelled = true; };
   }, []);
 
   const copyToClipboard = (text: string) => {

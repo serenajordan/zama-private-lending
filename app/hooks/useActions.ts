@@ -36,7 +36,7 @@ export function useActions() {
       const u64 = toU64Units(humanAmount, decimals);
       
       // Encrypt the amount for the faucet call
-      const enc = await encryptU64(process.env.NEXT_PUBLIC_TOKEN!, address, u64);
+      const enc = await encryptU64(humanAmount, decimals);
       
       // Call faucet function
       const tx = await token.faucet();
@@ -58,7 +58,7 @@ export function useActions() {
       const u64 = toU64Units(humanAmount, decimals);
       
       // Encrypt the amount for the deposit call
-      const enc = await encryptU64(process.env.NEXT_PUBLIC_POOL!, address, u64);
+      const enc = await encryptU64(humanAmount, decimals);
       
       // Call deposit function with encrypted amount
       const tx = await pool.deposit(enc);
@@ -80,7 +80,7 @@ export function useActions() {
       const u64 = toU64Units(humanAmount, decimals);
       
       // Encrypt the amount for the borrow call
-      const enc = await encryptU64(process.env.NEXT_PUBLIC_POOL!, address, u64);
+      const enc = await encryptU64(humanAmount, decimals);
       
       // Call borrow function with encrypted amount
       const tx = await pool.borrow(enc);
@@ -102,7 +102,7 @@ export function useActions() {
       const u64 = toU64Units(humanAmount, decimals);
       
       // Encrypt the amount for the repay call
-      const enc = await encryptU64(process.env.NEXT_PUBLIC_POOL!, address, u64);
+      const enc = await encryptU64(humanAmount, decimals);
       
       // Call repay function with encrypted amount
       const tx = await pool.repay(enc);

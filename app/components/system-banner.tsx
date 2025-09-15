@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { X, WifiOff, Server } from "lucide-react"
-import { relayerHealthy, RELAYER_URL } from "@/lib/relayer"
+import { relayerHealthy } from "@/lib/relayer"
 
 interface SystemStatus {
   relayerOnline: boolean
@@ -52,7 +52,7 @@ export function SystemBanner() {
       variant: "destructive" as const,
       icon: Server,
       title: "Relayer Offline",
-      description: `The FHE relayer is currently offline${RELAYER_URL ? ` (${RELAYER_URL})` : ''}. Faucet, deposit, borrow, and repay actions are disabled.`,
+      description: "The FHE relayer is currently offline. Faucet, deposit, borrow, and repay actions are disabled.",
     })
   }
 
