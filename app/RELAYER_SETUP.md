@@ -15,8 +15,8 @@ NEXT_PUBLIC_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 
 # FHEVM Relayer Configuration
 # Required – base URL of the FHE relayer (no trailing slash)
-# Example: https://relayer.sepolia.zama.ai
-NEXT_PUBLIC_RELAYER_URL=https://<your-relayer-host>
+# Example: https://relayer.testnet.zama.cloud
+NEXT_PUBLIC_RELAYER_URL=https://relayer.testnet.zama.cloud
 
 # WalletConnect (can be dummy in dev)
 NEXT_PUBLIC_WC_PROJECT_ID=YOUR_PROJECT_ID
@@ -27,11 +27,14 @@ NEXT_PUBLIC_WC_PROJECT_ID=YOUR_PROJECT_ID
 After setting the relayer URL, verify it works with:
 
 ```bash
-# Test health endpoint
-curl -sS "$NEXT_PUBLIC_RELAYER_URL/health"
+# Set your relayer URL
+RELAYER="https://relayer.testnet.zama.cloud"
 
-# Test keys endpoint
-curl -sS "$NEXT_PUBLIC_RELAYER_URL/keys/tfhe"
+# Test health endpoint
+curl -sS "$RELAYER/health"
+
+# Test keys endpoint  
+curl -sS "$RELAYER/keys/tfhe"
 ```
 
 ## Expected Console Output
@@ -39,7 +42,7 @@ curl -sS "$NEXT_PUBLIC_RELAYER_URL/keys/tfhe"
 In the browser console on page load, you should see:
 
 ```
-[relayer] healthy true url: https://your-relayer-url
+[relayer] healthy true url: https://relayer.testnet.zama.cloud
 ```
 
 If you see `false` or `(none)`, check your `NEXT_PUBLIC_RELAYER_URL` configuration.
@@ -48,9 +51,10 @@ If you see `false` or `(none)`, check your `NEXT_PUBLIC_RELAYER_URL` configurati
 
 The app now includes proper relayer validation:
 
-- **Missing URL**: Shows "Relayer URL not configured. Set NEXT_PUBLIC_RELAYER_URL in app/.env.local"
-- **Unreachable URL**: Shows "Relayer unavailable at: [url]. Check DNS, URL and /health."
-- **Actions are gated**: Faucet/Deposit/Borrow/Repay will not execute if relayer is unhealthy
+- **Missing URL**: Shows warning in dev console: `[relayer] no NEXT_PUBLIC_RELAYER_URL configured`
+- **Unreachable URL**: Shows "Relayer offline" on action buttons and system banner
+- **Actions are gated**: Faucet/Deposit/Borrow/Repay buttons are disabled when relayer is unhealthy
+- **Health checks**: Automatic retry with exponential backoff (250ms, 500ms, 1s)
 
 ## URL Normalization
 
@@ -59,3 +63,10 @@ The relayer URL is automatically normalized:
 - Removes trailing slashes
 - Trims whitespace
 - Validates format before use
+
+## Development Notes
+
+- **Restart required**: After changing environment variables, restart the dev server with `pnpm -C app dev`
+- **Health monitoring**: The system banner shows relayer status and updates every 30 seconds
+- **Button states**: Action buttons show "Relayer offline" when the relayer is unavailable
+- **Keys verification**: The `/keys/tfhe` endpoint is checked before encryption operations

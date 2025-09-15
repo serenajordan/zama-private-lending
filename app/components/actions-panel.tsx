@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,11 @@ import { Separator } from "@/components/ui/separator"
 import { Fence as Faucet, PiggyBank, CreditCard, RefreshCw, Send, Info, CheckCircle, AlertCircle } from "lucide-react"
 import { useEnhancedErrorHandling } from "@/components/enhanced-error-handling"
 import { PrivacyModal } from "@/components/privacy-modal"
+import { useAccount } from "wagmi"
+import { useActions } from "@/hooks/useActions"
+import { usePosition } from "@/hooks/usePosition"
+import { toast } from "sonner"
+import { relayerHealthy } from "@/lib/relayer"
 
 interface ActionCardProps {
   title: string
@@ -35,114 +40,147 @@ function ActionCard({ title, description, icon: Icon, children }: ActionCardProp
 }
 
 export function ActionsPanel() {
+  const { isConnected } = useAccount()
   const { showError, showSuccess, validateAmount, validateBalance, validateLTV } = useEnhancedErrorHandling()
+  const { faucet, deposit, borrow, repay, busy } = useActions()
+  const { pos, refresh } = usePosition()
   const [faucetAmount, setFaucetAmount] = useState("")
   const [depositAmount, setDepositAmount] = useState("")
   const [borrowAmount, setBorrowAmount] = useState("")
   const [repayAmount, setRepayAmount] = useState("")
   const [transferAmount, setTransferAmount] = useState("")
-  const [transferAddress, setTransferAddress] = useState("")
-  const [isLoading, setIsLoading] = useState<string | null>(null)
+  const [isRelayerHealthy, setIsRelayerHealthy] = useState(true)
 
-  // Mock balances for validation
-  const mockBalance = 1250
-  const mockMaxBorrow = 2400
+  // Check relayer health
+  useEffect(() => {
+    const checkHealth = async () => {
+      const isHealthy = await relayerHealthy();
+      setIsRelayerHealthy(isHealthy);
+    };
+    checkHealth();
+  }, []);
+  const [transferAddress, setTransferAddress] = useState("")
+
+  const disabled = !isConnected || !isRelayerHealthy
+
 
   const handleFaucet = async () => {
+    if (!isConnected) {
+      toast.error("Connect wallet to use faucet")
+      return
+    }
+
     const amountError = validateAmount(faucetAmount)
     if (amountError) {
       showError(amountError)
       return
     }
 
-    setIsLoading("faucet")
-    // Simulate potential relayer offline error
-    if (Math.random() < 0.2) {
-      setTimeout(() => {
-        showError("RELAYER_OFFLINE")
-        setIsLoading(null)
-      }, 1000)
-      return
-    }
-
-    setTimeout(() => {
-      showSuccess("Tokens Received", `Successfully received ${faucetAmount} cUSD from faucet`)
+    try {
+      await faucet(faucetAmount)
       setFaucetAmount("")
-      setIsLoading(null)
-    }, 2000)
+      await refresh() // Refresh position data
+    } catch (error) {
+      // Error handling is done in useActions hook
+    }
   }
 
   const handleDeposit = async () => {
+    if (!isConnected) {
+      toast.error("Connect wallet to deposit")
+      return
+    }
+
     const amountError = validateAmount(depositAmount)
     if (amountError) {
       showError(amountError)
       return
     }
 
-    const balanceError = validateBalance(depositAmount, mockBalance)
+    const balanceError = validateBalance(depositAmount, parseFloat(pos?.balance ?? '0'))
     if (balanceError) {
       showError(balanceError)
       return
     }
 
-    setIsLoading("deposit")
-    setTimeout(() => {
-      showSuccess("Deposit Successful", `Deposited ${depositAmount} cUSD as collateral`)
+    try {
+      await deposit(depositAmount)
       setDepositAmount("")
-      setIsLoading(null)
-    }, 2000)
+      await refresh() // Refresh position data
+    } catch (error) {
+      // Error handling is done in useActions hook
+    }
   }
 
   const handleBorrow = async () => {
+    if (!isConnected) {
+      toast.error("Connect wallet to borrow")
+      return
+    }
+
     const amountError = validateAmount(borrowAmount)
     if (amountError) {
       showError(amountError)
       return
     }
 
-    const ltvError = validateLTV(borrowAmount, mockMaxBorrow)
+    // Calculate max borrow based on deposits and LTV
+    const maxBorrow = pos ? parseFloat(pos.deposits) * (pos.maxLtvPct / 100) - parseFloat(pos.debt) : 0
+    const ltvError = validateLTV(borrowAmount, maxBorrow)
     if (ltvError) {
       showError(ltvError)
       return
     }
 
-    setIsLoading("borrow")
-    setTimeout(() => {
-      showSuccess("Borrow Successful", `Borrowed ${borrowAmount} cUSD`)
+    try {
+      await borrow(borrowAmount)
       setBorrowAmount("")
-      setIsLoading(null)
-    }, 2000)
+      await refresh() // Refresh position data
+    } catch (error) {
+      // Error handling is done in useActions hook
+    }
   }
 
   const handleRepay = async () => {
+    if (!isConnected) {
+      toast.error("Connect wallet to repay")
+      return
+    }
+
     const amountError = validateAmount(repayAmount)
     if (amountError) {
       showError(amountError)
       return
     }
 
-    const balanceError = validateBalance(repayAmount, mockBalance)
+    const balanceError = validateBalance(repayAmount, parseFloat(pos?.balance ?? '0'))
     if (balanceError) {
       showError(balanceError)
       return
     }
 
-    setIsLoading("repay")
-    setTimeout(() => {
-      showSuccess("Repayment Successful", `Repaid ${repayAmount} cUSD`)
+    try {
+      await repay(repayAmount)
       setRepayAmount("")
-      setIsLoading(null)
-    }, 2000)
+      await refresh() // Refresh position data
+    } catch (error) {
+      // Error handling is done in useActions hook
+    }
   }
 
   const handleTransfer = async () => {
+    if (!isConnected) {
+      toast.error("Connect wallet to transfer")
+      return
+    }
+
     const amountError = validateAmount(transferAmount)
     if (amountError) {
       showError(amountError)
       return
     }
 
-    const balanceError = validateBalance(transferAmount, mockBalance)
+    const balanceError = validateBalance(transferAmount, parseFloat(pos?.balance ?? '0'))
     if (balanceError) {
       showError(balanceError)
       return
@@ -153,20 +191,13 @@ export function ActionsPanel() {
       return
     }
 
-    setIsLoading("transfer")
-    setTimeout(() => {
-      showSuccess(
-        "Transfer Successful",
-        `Transferred ${transferAmount} cUSD to ${transferAddress.slice(0, 6)}...${transferAddress.slice(-4)}`,
-      )
-      setTransferAmount("")
-      setTransferAddress("")
-      setIsLoading(null)
-    }, 2000)
+    // Transfer functionality would need to be implemented in useActions
+    toast.info("Transfer functionality not yet implemented")
   }
 
-  const checkBalance = () => {
-    showSuccess("Balance Check", "Current balance: 1,250.00 cUSD")
+  const checkBalance = async () => {
+    await refresh()
+    toast.success("Balance refreshed")
   }
 
   return (
@@ -184,15 +215,16 @@ export function ActionsPanel() {
               onChange={(e) => setFaucetAmount(e.target.value)}
               step="0.01"
               min="0"
+              disabled={disabled}
             />
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={checkBalance} className="flex-1 bg-transparent">
+            <Button variant="outline" size="sm" onClick={checkBalance} disabled={disabled} className="flex-1 bg-transparent">
               <RefreshCw className="w-3 h-3 mr-1" />
               Check Balance
             </Button>
-            <Button onClick={handleFaucet} disabled={isLoading === "faucet"} className="flex-1">
-              {isLoading === "faucet" ? "Getting..." : "Get Tokens"}
+            <Button onClick={handleFaucet} disabled={disabled || busy === "faucet"} className="flex-1">
+              {busy === "faucet" ? "Getting..." : !isConnected ? "Connect wallet" : !isRelayerHealthy ? "Relayer offline" : "Get Tokens"}
             </Button>
           </div>
         </div>
@@ -213,14 +245,15 @@ export function ActionsPanel() {
               onChange={(e) => setDepositAmount(e.target.value)}
               step="0.01"
               min="0"
+              disabled={disabled}
             />
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Info className="w-3 h-3" />
             <span>Deposits are encrypted using FHE</span>
           </div>
-          <Button onClick={handleDeposit} disabled={isLoading === "deposit"} className="w-full">
-            {isLoading === "deposit" ? "Depositing..." : "Deposit"}
+          <Button onClick={handleDeposit} disabled={disabled || busy === "deposit"} className="w-full">
+            {busy === "deposit" ? "Depositing..." : !isConnected ? "Connect wallet to deposit" : !isRelayerHealthy ? "Relayer offline" : "Deposit"}
           </Button>
         </div>
       </ActionCard>
@@ -238,19 +271,20 @@ export function ActionsPanel() {
               onChange={(e) => setBorrowAmount(e.target.value)}
               step="0.01"
               min="0"
+              disabled={disabled}
             />
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <AlertCircle className="w-3 h-3" />
-            <span>Max borrow: 2,400.00 cUSD (80% LTV)</span>
+            <span>Max borrow: {pos ? (parseFloat(pos.deposits) * (pos.maxLtvPct / 100) - parseFloat(pos.debt)).toFixed(2) : '0.00'} cUSD ({pos?.maxLtvPct ?? 80}% LTV)</span>
           </div>
           <Button
             onClick={handleBorrow}
-            disabled={isLoading === "borrow"}
+            disabled={disabled || busy === "borrow"}
             variant="outline"
             className="w-full bg-transparent"
           >
-            {isLoading === "borrow" ? "Borrowing..." : "Borrow"}
+            {busy === "borrow" ? "Borrowing..." : !isConnected ? "Connect wallet to borrow" : !isRelayerHealthy ? "Relayer offline" : "Borrow"}
           </Button>
         </div>
       </ActionCard>
@@ -268,14 +302,15 @@ export function ActionsPanel() {
               onChange={(e) => setRepayAmount(e.target.value)}
               step="0.01"
               min="0"
+              disabled={disabled}
             />
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Info className="w-3 h-3" />
-            <span>Outstanding debt: 2,100.00 cUSD</span>
+            <span>Outstanding debt: {pos?.debt ?? '0.00'} cUSD</span>
           </div>
-          <Button onClick={handleRepay} disabled={isLoading === "repay"} variant="secondary" className="w-full">
-            {isLoading === "repay" ? "Repaying..." : "Repay"}
+          <Button onClick={handleRepay} disabled={disabled || busy === "repay"} variant="secondary" className="w-full">
+            {busy === "repay" ? "Repaying..." : !isConnected ? "Connect wallet to repay" : !isRelayerHealthy ? "Relayer offline" : "Repay"}
           </Button>
         </div>
       </ActionCard>
@@ -292,6 +327,7 @@ export function ActionsPanel() {
               placeholder="0x..."
               value={transferAddress}
               onChange={(e) => setTransferAddress(e.target.value)}
+              disabled={disabled}
             />
           </div>
           <div className="space-y-2">
@@ -304,14 +340,15 @@ export function ActionsPanel() {
               onChange={(e) => setTransferAmount(e.target.value)}
               step="0.01"
               min="0"
+              disabled={disabled}
             />
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Info className="w-3 h-3" />
             <span>Transfers are private and encrypted</span>
           </div>
-          <Button onClick={handleTransfer} disabled={isLoading === "transfer"} className="w-full">
-            {isLoading === "transfer" ? "Transferring..." : "Transfer"}
+          <Button onClick={handleTransfer} disabled={disabled} className="w-full">
+            {!isConnected ? "Connect wallet to transfer" : !isRelayerHealthy ? "Relayer offline" : "Transfer"}
           </Button>
         </div>
       </ActionCard>

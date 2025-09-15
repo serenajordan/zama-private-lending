@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 pragma solidity ^0.8.24;
 
-import { ZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
-import "fhevm/lib/TFHE.sol";
+import { FHE } from "@fhevm/solidity";
+import { ZamaConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 import "./ConfidentialUSD.sol";
 
 /**
@@ -14,8 +14,8 @@ import "./ConfidentialUSD.sol";
  * FHEVM integration will be added once version compatibility is resolved.
  */
 contract PrivateLendingPool {
-    using TFHE for euint64;
-    using TFHE for ebool;
+    using FHE for euint64;
+    using FHE for ebool;
 
     // State variables
     ConfidentialUSD public asset; // Changed from immutable to allow updates
@@ -56,6 +56,8 @@ contract PrivateLendingPool {
     event LiquidationAttempt(address indexed user, bool executed);
 
     constructor(address _asset) {
+        // Align with latest Zama guide: configure coprocessor via ZamaConfig
+        FHE.setCoprocessor(ZamaConfig.getSepoliaConfig());
         asset = ConfidentialUSD(_asset);
         owner = msg.sender;
     }
@@ -100,15 +102,15 @@ contract PrivateLendingPool {
 
         // TODO: Re-enable FHEVM types once version compatibility is resolved
         // euint64 eDebt = _encDebt[user];
-        // if (!TFHE.isInitialized(eDebt)) { return; } // no debt yet
+        // if (!FHE.isInitialized(eDebt)) { return; } // no debt yet
 
         // scale = rate * blocks
         // uint64 scaleBps = interestRateBpsPerBlock * dBlocks;
-        // euint64 eScale = TFHE.asEuint64(scaleBps);
-        // euint64 numerator = TFHE.mul(eDebt, eScale);           // debt * (rate*blocks)
-        // euint64 eBps = TFHE.asEuint64(uint64(BPS));
-        // euint64 eIncr = TFHE.div(numerator, eBps);             // / BPS
-        // _encDebt[user] = TFHE.add(eDebt, eIncr);
+        // euint64 eScale = FHE.asEuint64(scaleBps);
+        // euint64 numerator = FHE.mul(eDebt, eScale);           // debt * (rate*blocks)
+        // euint64 eBps = FHE.asEuint64(uint64(BPS));
+        // euint64 eIncr = FHE.div(numerator, eBps);             // / BPS
+        // _encDebt[user] = FHE.add(eDebt, eIncr);
 
         emit InterestAccrued(user, dBlocks, keccak256("accrue"));
     }
@@ -261,17 +263,17 @@ contract PrivateLendingPool {
         // TODO: Re-enable FHEVM types once version compatibility is resolved
         // euint64 eDebt = _encDebt[user];
         // euint64 eCol  = _encDeposits[user];
-        // if (!TFHE.isInitialized(eDebt) || !TFHE.isInitialized(eCol)) {
+        // if (!FHE.isInitialized(eDebt) || !FHE.isInitialized(eCol)) {
         //     emit LiquidationAttempt(user, false);
         //     return;
         // }
         // threshold = eCol * ltvBps / BPS
-        // euint64 eLtv   = TFHE.asEuint64(uint64(ltvBps));
-        // euint64 eBps   = TFHE.asEuint64(uint64(BPS));
-        // euint64 eProd  = TFHE.mul(eCol, eLtv);
-        // euint64 eLimit = TFHE.div(eProd, eBps);
+        // euint64 eLtv   = FHE.asEuint64(uint64(ltvBps));
+        // euint64 eBps   = FHE.asEuint64(uint64(BPS));
+        // euint64 eProd  = FHE.mul(eCol, eLtv);
+        // euint64 eLimit = FHE.div(eProd, eBps);
 
-        // ebool underwater = TFHE.gt(eDebt, eLimit);
+        // ebool underwater = FHE.gt(eDebt, eLimit);
 
         // repay amount comes as encrypted handle (from user or liquidator)
         // NOTE: this consumes the relayer proof like repay()
@@ -279,19 +281,19 @@ contract PrivateLendingPool {
         // euint64 eRepay = _consumeHandleToEuint64(repayHandle, repayProof);
 
         // clamp repay to debt
-        // ebool repayTooBig = TFHE.gt(eRepay, eDebt);
-        // euint64 eClamped  = TFHE.select(repayTooBig, eDebt, eRepay);
+        // ebool repayTooBig = FHE.gt(eRepay, eDebt);
+        // euint64 eClamped  = FHE.select(repayTooBig, eDebt, eRepay);
 
         // newDebt = underwater ? (debt - clamped) : debt
-        // euint64 eNewDebt  = TFHE.select(underwater, TFHE.sub(eDebt, eClamped), eDebt);
+        // euint64 eNewDebt  = FHE.select(underwater, FHE.sub(eDebt, eClamped), eDebt);
         // _encDebt[user]    = eNewDebt;
 
         // For collateral, you might seize a small penalty proportional to repay:
         // seized = underwater ? (clamped / 10) : 0
-        // euint64 eZero     = TFHE.asEuint64(0);
-        // euint64 eSeize    = TFHE.div(eClamped, TFHE.asEuint64(10));
-        // euint64 eDeltaCol = TFHE.select(underwater, eSeize, eZero);
-        // _encDeposits[user]= TFHE.sub(eCol, eDeltaCol); // reduce collateral if liquidated
+        // euint64 eZero     = FHE.asEuint64(0);
+        // euint64 eSeize    = FHE.div(eClamped, FHE.asEuint64(10));
+        // euint64 eDeltaCol = FHE.select(underwater, eSeize, eZero);
+        // _encDeposits[user]= FHE.sub(eCol, eDeltaCol); // reduce collateral if liquidated
 
         emit LiquidationAttempt(user, false);
     }
@@ -300,6 +302,6 @@ contract PrivateLendingPool {
     function _consumeHandleToEuint64(bytes32 handle, bytes32 proof) internal returns (euint64) {
         // TODO: replace with your existing handle+proof consumer from encryptU64.
         // For now, return initialized zero to keep compiler happy if needed.
-        return TFHE.asEuint64(0);
+        return FHE.asEuint64(0);
     }
 }

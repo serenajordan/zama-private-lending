@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { X, WifiOff, Server } from "lucide-react"
+import { relayerHealthy, RELAYER_URL } from "@/lib/relayer"
 
 interface SystemStatus {
   relayerOnline: boolean
@@ -19,21 +20,24 @@ export function SystemBanner() {
   })
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set())
 
-  // Simulate system status changes for demo
+  // Check relayer health periodically
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Randomly simulate relayer going offline
-      if (Math.random() < 0.1) {
-        setSystemStatus((prev) => ({
-          ...prev,
-          relayerOnline: Math.random() > 0.3,
-          networkConnected: Math.random() > 0.1,
-          lastUpdated: new Date(),
-        }))
-      }
-    }, 10000)
+    const checkRelayerHealth = async () => {
+      const isHealthy = await relayerHealthy();
+      setSystemStatus((prev) => ({
+        ...prev,
+        relayerOnline: isHealthy,
+        lastUpdated: new Date(),
+      }));
+    };
 
-    return () => clearInterval(interval)
+    // Check immediately
+    checkRelayerHealth();
+
+    // Then check every 30 seconds
+    const interval = setInterval(checkRelayerHealth, 30000);
+
+    return () => clearInterval(interval);
   }, [])
 
   const dismissAlert = (alertId: string) => {
@@ -48,7 +52,7 @@ export function SystemBanner() {
       variant: "destructive" as const,
       icon: Server,
       title: "Relayer Offline",
-      description: "The transaction relayer is currently offline. Transactions may be delayed or fail.",
+      description: `The FHE relayer is currently offline${RELAYER_URL ? ` (${RELAYER_URL})` : ''}. Faucet, deposit, borrow, and repay actions are disabled.`,
     })
   }
 

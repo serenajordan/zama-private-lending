@@ -174,9 +174,15 @@ export function Dashboard() {
   useEffect(() => {
     let on = true;
     (async () => {
+      const effectiveUrl = RELAYER_URL ?? "(none)";
+      console.log("[relayer] checking health for URL:", effectiveUrl);
+      
       const ok = await relayerHealthy();
       if (on) {
-        console.log("[relayer] healthy", ok, "url:", RELAYER_URL ?? "(none)");
+        console.log("[relayer] health check result:", ok ? "✅ healthy" : "❌ unhealthy", "| URL:", effectiveUrl);
+        if (!ok && effectiveUrl !== "(none)") {
+          console.warn("[relayer] relayer is unhealthy - actions will be disabled");
+        }
       }
     })();
     return () => { on = false; };

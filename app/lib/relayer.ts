@@ -16,6 +16,11 @@ export function normalizeUrl(raw?: string | null): string | null {
 
 export const RELAYER_URL = normalizeUrl(process.env.NEXT_PUBLIC_RELAYER_URL ?? null);
 
+// Log warning if no relayer URL is configured
+if (!RELAYER_URL && process.env.NODE_ENV === 'development') {
+  console.warn('[relayer] no NEXT_PUBLIC_RELAYER_URL configured');
+}
+
 async function ensurePolyfills() {
   // Some libs expect Node globals in the browser
   // @ts-ignore
@@ -38,20 +43,33 @@ export async function relayerHealthy(urlOverride?: string, timeoutMs = 3500): Pr
   const url = normalizeUrl(urlOverride) ?? RELAYER_URL;
   if (!url) return false;
 
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
+  const delays = [250, 500, 1000]; // Exponential backoff delays in ms
+  
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    const res = await fetch(`${url}/health`, { signal: controller.signal, cache: "no-store" });
-    if (!res.ok) return false;
-    // Many relayers return { ok: true } or 200/"ok"
-    return true;
-  } catch (e) {
-    console.warn("[relayer] health check failed", e);
-    return false;
-  } finally {
-    clearTimeout(t);
+    try {
+      const res = await fetch(`${url}/health`, { signal: controller.signal, cache: "no-store" });
+      if (res.ok) {
+        clearTimeout(t);
+        return true;
+      }
+    } catch (e) {
+      if (attempt === delays.length - 1) {
+        console.warn("[relayer] health check failed after retries:", e);
+      }
+    } finally {
+      clearTimeout(t);
+    }
+
+    // Wait before next attempt (except on last attempt)
+    if (attempt < delays.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+    }
   }
+
+  return false;
 }
 
 // Convenience guard to run before encryption/tx calls
@@ -83,7 +101,22 @@ export async function relayerRegister(): Promise<void> {
 
 // value must be uint64 in micro-units (bigint)
 export async function encryptU64(contract: string, user: string, value: bigint) {
-  console.info('[relayer] Using relayer URL:', RELAYER_URL);
+  console.info(`[relayer] using ${RELAYER_URL}`);
+  
+  if (!RELAYER_URL) {
+    throw new Error('Relayer unavailable');
+  }
+
+  // Verify keys endpoint before proceeding
+  try {
+    const keysResponse = await fetch(`${RELAYER_URL}/keys/tfhe`, { cache: 'no-store' });
+    if (!keysResponse.ok) {
+      throw new Error('Relayer unavailable');
+    }
+  } catch (e) {
+    throw new Error('Relayer unavailable');
+  }
+
   const relayer = await getRelayer();
   const buf = relayer.createEncryptedInput(contract, user);
   buf.add64(value);
