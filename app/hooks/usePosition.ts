@@ -55,7 +55,7 @@ export function usePosition() {
       // Max LTV is typically 80% for lending protocols
       const maxLtvPct = 80;
 
-      setPos({ 
+      const newPosition = { 
         decimals, 
         balance, 
         deposits, 
@@ -63,11 +63,14 @@ export function usePosition() {
         healthPct, 
         ltvPct, 
         maxLtvPct 
-      });
+      };
+
+      console.log('[usePosition] Refreshing position:', newPosition);
+      setPos(newPosition);
     } catch (error) {
       console.error('Error fetching position:', error);
       // Set default values on error
-      setPos({
+      const defaultPosition = {
         decimals: 18,
         balance: '0.00',
         deposits: '0.00',
@@ -75,7 +78,9 @@ export function usePosition() {
         healthPct: 100,
         ltvPct: 0,
         maxLtvPct: 80
-      });
+      };
+      console.log('[usePosition] Setting default position:', defaultPosition);
+      setPos(defaultPosition);
     } finally {
       setLoading(false);
     }
