@@ -23,6 +23,15 @@ const nextConfig = {
       /Circular dependency between chunks/,
       /Circular dependency between chunks with runtime/,
     ];
+    
+    // Add global polyfill for browser environment
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        global: require.resolve('global'),
+      };
+    }
+    
     return config;
   },
 }
