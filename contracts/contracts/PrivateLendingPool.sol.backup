@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 pragma solidity ^0.8.25;
 
-import { FHE } from "@fhevm/solidity/lib/FHE.sol";
-import "encrypted-types/EncryptedTypes.sol";
+import { FHE } from "@fhevm/solidity";
 import { ZamaConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 import "./ConfidentialUSD.sol";
 
@@ -41,61 +40,67 @@ contract PrivateLendingPool {
      * @dev Deposit tokens as collateral
      * @param amount Encrypted amount to deposit
      */
-    function deposit(externalEuint64 amount, bytes memory inputProof) external {
-        euint64 encryptedAmount = FHE.fromExternal(amount, inputProof);
+    function deposit(bytes32 amount) external {
+        euint64 encryptedAmount = FHE.asEuint64(amount);
         
         // Add to user's deposits
-        deposits[msg.sender] = FHE.add(deposits[msg.sender], encryptedAmount);
+        deposits[msg.sender] = deposits[msg.sender] + encryptedAmount;
         
         // Transfer tokens from user to this contract
         // Note: This requires the user to approve this contract first
-        // token.transferFromEncrypted(msg.sender, address(this), amount);
+        token.transferFromEncrypted(msg.sender, address(this), amount);
         
-        emit Deposit(msg.sender, externalEuint64.unwrap(amount));
+        emit Deposit(msg.sender, amount);
     }
 
     /**
      * @dev Borrow tokens against collateral
      * @param amount Encrypted amount to borrow
      */
-    function borrow(externalEuint64 amount, bytes memory inputProof) external {
-        euint64 encryptedAmount = FHE.fromExternal(amount, inputProof);
+    function borrow(bytes32 amount) external {
+        euint64 encryptedAmount = FHE.asEuint64(amount);
         euint64 userDeposits = deposits[msg.sender];
         euint64 userDebts = debts[msg.sender];
         
         // Calculate new debt
-        euint64 newDebt = FHE.add(userDebts, encryptedAmount);
+        euint64 newDebt = userDebts + encryptedAmount;
         
-        // For compilation purposes, simplified LTV check
-        // In a real implementation, this would use proper FHE operations
+        // Check LTV (this is simplified - in practice you'd need price oracles)
+        // For now, we assume 1:1 ratio and check that debt doesn't exceed 70% of deposits
+        euint64 maxBorrow = userDeposits * FHE.asEuint64(MAX_LTV) / FHE.asEuint64(10000);
+        
+        // Verify borrowing capacity (this would be done privately in real implementation)
+        ebool canBorrow = newDebt.lte(maxBorrow);
+        require(FHE.decrypt(canBorrow), "Insufficient collateral");
         
         // Update debt
         debts[msg.sender] = newDebt;
         
-        // Transfer tokens to user (commented out for compilation)
-        // token.transferEncrypted(msg.sender, amount);
+        // Transfer tokens to user
+        token.transferEncrypted(msg.sender, amount);
         
-        emit Borrow(msg.sender, externalEuint64.unwrap(amount));
+        emit Borrow(msg.sender, amount);
     }
 
     /**
      * @dev Repay borrowed tokens
      * @param amount Encrypted amount to repay
      */
-    function repay(externalEuint64 amount, bytes memory inputProof) external {
-        euint64 encryptedAmount = FHE.fromExternal(amount, inputProof);
+    function repay(bytes32 amount) external {
+        euint64 encryptedAmount = FHE.asEuint64(amount);
         euint64 userDebt = debts[msg.sender];
         
-        // For compilation purposes, simplified validation
-        // In a real implementation, this would use proper FHE operations
+        // Ensure not repaying more than owed
+        ebool validRepayment = encryptedAmount.lte(userDebt);
+        require(FHE.decrypt(validRepayment), "Repaying more than owed");
         
         // Update debt
-        debts[msg.sender] = FHE.sub(userDebt, encryptedAmount);
+        debts[msg.sender] = userDebt - encryptedAmount;
         
-        // Transfer tokens from user to this contract (commented out for compilation)
-        // token.transferFromEncrypted(msg.sender, address(this), amount);
+        // Transfer tokens from user to this contract
+        token.transferFromEncrypted(msg.sender, address(this), amount);
         
-        emit Repay(msg.sender, externalEuint64.unwrap(amount));
+        emit Repay(msg.sender, amount);
     }
 
     /**
@@ -104,9 +109,12 @@ contract PrivateLendingPool {
      * @return userDebt Encrypted debt
      */
     function viewMyPosition() external view returns (uint64, uint64) {
-        // For compilation purposes, simplified implementation
-        // In a real implementation, this would use proper FHE decryption
-        return (0, 0);
+        // In a real implementation, this would return encrypted values
+        // For demo purposes, we decrypt for the user
+        euint64 userDeposits = deposits[msg.sender];
+        euint64 userDebt = debts[msg.sender];
+        
+        return (FHE.decrypt(userDeposits), FHE.decrypt(userDebt));
     }
 
     /**
@@ -115,9 +123,18 @@ contract PrivateLendingPool {
      * @return healthFactor Health factor (scaled by 1e18)
      */
     function getHealthFactor(address user) external view returns (uint256) {
-        // For compilation purposes, simplified implementation
-        // In a real implementation, this would use proper FHE decryption
-        return type(uint256).max; // Always healthy for compilation
+        euint64 userDeposits = deposits[user];
+        euint64 userDebt = debts[user];
+        
+        uint64 depositsDecrypted = FHE.decrypt(userDeposits);
+        uint64 debtDecrypted = FHE.decrypt(userDebt);
+        
+        if (debtDecrypted == 0) {
+            return type(uint256).max; // No debt = infinite health
+        }
+        
+        // Health factor = (deposits * liquidation_threshold) / debt
+        return (depositsDecrypted * LIQUIDATION_THRESHOLD * 1e18) / (debtDecrypted * 10000);
     }
 
     /**
@@ -135,27 +152,36 @@ contract PrivateLendingPool {
      * @param borrower Address of the borrower to liquidate
      * @param repayAmount Encrypted amount to repay
      */
-    function liquidate(address borrower, externalEuint64 repayAmount, bytes memory inputProof) external {
+    function liquidate(address borrower, bytes32 repayAmount) external {
         require(this.canLiquidate(borrower), "Position is healthy");
         
-        euint64 encryptedRepayAmount = FHE.fromExternal(repayAmount, inputProof);
+        euint64 encryptedRepayAmount = FHE.asEuint64(repayAmount);
         euint64 borrowerDebt = debts[borrower];
         euint64 borrowerDeposits = deposits[borrower];
         
-        // For compilation purposes, simplified validation
-        // In a real implementation, this would use proper FHE operations
+        // Ensure not repaying more than the debt
+        ebool validLiquidation = encryptedRepayAmount.lte(borrowerDebt);
+        require(FHE.decrypt(validLiquidation), "Repay amount exceeds debt");
+        
+        // Calculate collateral to seize (with liquidation bonus)
+        // Simplified: 1:1 ratio + 10% bonus
+        euint64 collateralToSeize = encryptedRepayAmount * FHE.asEuint64(110) / FHE.asEuint64(100);
+        
+        // Ensure there's enough collateral
+        ebool sufficientCollateral = collateralToSeize.lte(borrowerDeposits);
+        require(FHE.decrypt(sufficientCollateral), "Insufficient collateral");
         
         // Update borrower's position
-        debts[borrower] = FHE.sub(borrowerDebt, encryptedRepayAmount);
-        deposits[borrower] = FHE.sub(borrowerDeposits, encryptedRepayAmount); // Simplified
+        debts[borrower] = borrowerDebt - encryptedRepayAmount;
+        deposits[borrower] = borrowerDeposits - collateralToSeize;
         
         // Update liquidator's position
-        deposits[msg.sender] = FHE.add(deposits[msg.sender], encryptedRepayAmount);
+        deposits[msg.sender] = deposits[msg.sender] + collateralToSeize;
         
-        // Transfer repayment from liquidator to contract (commented out for compilation)
-        // token.transferFromEncrypted(msg.sender, address(this), repayAmount);
+        // Transfer repayment from liquidator to contract
+        token.transferFromEncrypted(msg.sender, address(this), repayAmount);
         
-        emit Liquidation(msg.sender, borrower, externalEuint64.unwrap(repayAmount));
+        emit Liquidation(msg.sender, borrower, repayAmount);
     }
 
     /**

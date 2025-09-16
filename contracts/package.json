@@ -11,10 +11,10 @@
     "node": "hardhat node"
   },
   "dependencies": {
-    "@zama-fhe/oracle-solidity": "0.0.4-0"
+    "@zama-fhe/oracle-solidity": "0.0.4-0",
+    "encrypted-types": "^0.0.4"
   },
   "devDependencies": {
-    "fhevm": "^0.6.0",
     "@fhevm/hardhat-plugin": "0.0.1-6",
     "@fhevm/mock-utils": "0.0.1-6",
     "@fhevm/solidity": "latest",
@@ -25,6 +25,7 @@
     "chai": "^4.5.0",
     "dotenv": "^16.0.0",
     "ethers": "^6.0.0",
+    "fhevm": "^0.6.0",
     "hardhat": "^2.22.7",
     "hardhat-gas-reporter": "^2.3.0",
     "mocha": "^10.0.0",
