@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.25;
 
 // TODO: Re-enable FHEVM imports once version compatibility is resolved
 // import "@fhevm/solidity/config/FHEVMConfig.sol";
