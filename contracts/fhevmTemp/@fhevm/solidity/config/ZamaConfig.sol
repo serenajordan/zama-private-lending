@@ -54,7 +54,6 @@ library ZamaConfig {
 contract SepoliaConfig {
     constructor() {
         FHE.setCoprocessor(ZamaConfig.getSepoliaConfig());
-        FHE.setDecryptionOracle(ZamaConfig.getSepoliaOracleAddress());
     }
 }
 
@@ -68,6 +67,5 @@ contract SepoliaConfig {
 contract EthereumConfig {
     constructor() {
         FHE.setCoprocessor(ZamaConfig.getEthereumConfig());
-        FHE.setDecryptionOracle(ZamaConfig.getEthereumOracleAddress());
     }
 }

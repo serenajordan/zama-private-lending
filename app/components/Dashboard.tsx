@@ -8,6 +8,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Progress } from "@/components/ui/progress"
 import { ActionsPanel } from "@/components/actions-panel"
 import { ActivityTable } from "@/components/activity-table"
+import { useAccount } from "wagmi"
+import { usePosition } from "@/hooks/usePosition"
+import { relayerHealthy } from "@/lib/relayer"
+import { useEffect } from "react"
 
 function KPICard({
   title,
@@ -158,10 +162,30 @@ function HealthStatus({ health }: { health: number }) {
 }
 
 export function Dashboard() {
+  const { isConnected } = useAccount()
+  const { loading, pos } = usePosition()
   const contractAddresses = {
-    token: "0x1234567890123456789012345678901234567890",
-    pool: "0x0987654321098765432109876543210987654321",
+    token: process.env.NEXT_PUBLIC_TOKEN || "0x0000000000000000000000000000000000000000",
+    pool: process.env.NEXT_PUBLIC_POOL || "0x0000000000000000000000000000000000000000",
   }
+  const disabled = !isConnected
+
+  // Health check on load
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      console.log("[relayer] checking health...");
+      
+      const ok = await relayerHealthy();
+      if (!cancelled) {
+        console.log("[relayer] health check result:", ok ? "✅ healthy" : "❌ unhealthy");
+        if (!ok) {
+          console.warn("[relayer] relayer is unhealthy - actions will be disabled");
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -202,9 +226,9 @@ export function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <KPICard
               title="Token Balance"
-              value="1,250.00"
+              value={pos?.balance ?? '0.00'}
               unit="cUSD"
-              change={2.5}
+              change={0}
               changeType="positive"
               icon={DollarSign}
               description="Your current token balance available for transactions"
@@ -212,9 +236,9 @@ export function Dashboard() {
 
             <KPICard
               title="Total Deposits"
-              value="5,000.00"
+              value={pos?.deposits ?? '0.00'}
               unit="cUSD"
-              change={12.3}
+              change={0}
               changeType="positive"
               icon={PiggyBank}
               description="Total amount deposited as collateral in the lending pool"
@@ -222,15 +246,15 @@ export function Dashboard() {
 
             <KPICard
               title="Total Debt"
-              value="2,100.00"
+              value={pos?.debt ?? '0.00'}
               unit="cUSD"
-              change={-1.8}
+              change={0}
               changeType="negative"
               icon={CreditCard}
               description="Outstanding borrowed amount that needs to be repaid"
             />
 
-            <HealthStatus health={75} />
+            <HealthStatus health={pos?.healthPct ?? 100} />
           </div>
 
           {/* LTV Panel */}
@@ -254,15 +278,15 @@ export function Dashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Max LTV</p>
-                  <p className="text-xl font-bold">80%</p>
+                  <p className="text-xl font-bold">{pos?.maxLtvPct ?? 80}%</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Current LTV</p>
-                  <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400">42%</p>
+                  <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400">{pos?.ltvPct.toFixed(1) ?? '0.0'}%</p>
                 </div>
               </div>
               <div className="space-y-2">
-                <Progress value={42} max={80} className="h-3" />
+                <Progress value={pos?.ltvPct ?? 0} max={pos?.maxLtvPct ?? 80} className="h-3" />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Safe Zone</span>
                   <span>Liquidation Risk</span>
@@ -278,12 +302,14 @@ export function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Button className="h-12">Deposit</Button>
-                <Button variant="outline" className="h-12 bg-transparent">
-                  Borrow
+                <Button className="h-12" disabled={disabled}>
+                  {disabled ? "Connect wallet" : "Deposit"}
                 </Button>
-                <Button variant="secondary" className="h-12">
-                  Repay
+                <Button variant="outline" className="h-12 bg-transparent" disabled={disabled}>
+                  {disabled ? "Connect wallet" : "Borrow"}
+                </Button>
+                <Button variant="secondary" className="h-12" disabled={disabled}>
+                  {disabled ? "Connect wallet" : "Repay"}
                 </Button>
               </div>
             </CardContent>

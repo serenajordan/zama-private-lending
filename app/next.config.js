@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const webpack = require('webpack');
+
 const nextConfig = {
   // Safe dev settings to prevent 404s for _next/static assets
   reactStrictMode: true,
@@ -23,6 +25,7 @@ const nextConfig = {
       /Circular dependency between chunks/,
       /Circular dependency between chunks with runtime/,
     ];
+    
     return config;
   },
 }
