@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 pragma solidity ^0.8.25;
 
-import { FHE } from "@fhevm/solidity/lib/FHE.sol";
 import "encrypted-types/EncryptedTypes.sol";
 import { ZamaConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 import "./ConfidentialUSD.sol";
+import { TFHE } from "./utils/TFHEOps.sol";
 
 /**
  * @title PrivateLendingPool
@@ -15,8 +15,6 @@ import "./ConfidentialUSD.sol";
  * FHEVM integration will be added once version compatibility is resolved.
  */
 contract PrivateLendingPool {
-    using FHE for euint64;
-    using FHE for ebool;
 
     // State variables
     ConfidentialUSD public token;
@@ -42,10 +40,10 @@ contract PrivateLendingPool {
      * @param amount Encrypted amount to deposit
      */
     function deposit(externalEuint64 amount, bytes memory inputProof) external {
-        euint64 encryptedAmount = FHE.fromExternal(amount, inputProof);
-        
+        euint64 encryptedAmount = TFHE.fromExternal(amount, inputProof);
+
         // Add to user's deposits
-        deposits[msg.sender] = FHE.add(deposits[msg.sender], encryptedAmount);
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], encryptedAmount);
         
         // Transfer tokens from user to this contract
         // Note: This requires the user to approve this contract first
@@ -59,12 +57,12 @@ contract PrivateLendingPool {
      * @param amount Encrypted amount to borrow
      */
     function borrow(externalEuint64 amount, bytes memory inputProof) external {
-        euint64 encryptedAmount = FHE.fromExternal(amount, inputProof);
+        euint64 encryptedAmount = TFHE.fromExternal(amount, inputProof);
         euint64 userDeposits = deposits[msg.sender];
         euint64 userDebts = debts[msg.sender];
-        
+
         // Calculate new debt
-        euint64 newDebt = FHE.add(userDebts, encryptedAmount);
+        euint64 newDebt = TFHE.add(userDebts, encryptedAmount);
         
         // For compilation purposes, simplified LTV check
         // In a real implementation, this would use proper FHE operations
@@ -83,14 +81,14 @@ contract PrivateLendingPool {
      * @param amount Encrypted amount to repay
      */
     function repay(externalEuint64 amount, bytes memory inputProof) external {
-        euint64 encryptedAmount = FHE.fromExternal(amount, inputProof);
+        euint64 encryptedAmount = TFHE.fromExternal(amount, inputProof);
         euint64 userDebt = debts[msg.sender];
         
         // For compilation purposes, simplified validation
         // In a real implementation, this would use proper FHE operations
         
         // Update debt
-        debts[msg.sender] = FHE.sub(userDebt, encryptedAmount);
+        debts[msg.sender] = TFHE.sub(userDebt, encryptedAmount);
         
         // Transfer tokens from user to this contract (commented out for compilation)
         // token.transferFromEncrypted(msg.sender, address(this), amount);
@@ -138,7 +136,7 @@ contract PrivateLendingPool {
     function liquidate(address borrower, externalEuint64 repayAmount, bytes memory inputProof) external {
         require(this.canLiquidate(borrower), "Position is healthy");
         
-        euint64 encryptedRepayAmount = FHE.fromExternal(repayAmount, inputProof);
+        euint64 encryptedRepayAmount = TFHE.fromExternal(repayAmount, inputProof);
         euint64 borrowerDebt = debts[borrower];
         euint64 borrowerDeposits = deposits[borrower];
         
@@ -146,11 +144,11 @@ contract PrivateLendingPool {
         // In a real implementation, this would use proper FHE operations
         
         // Update borrower's position
-        debts[borrower] = FHE.sub(borrowerDebt, encryptedRepayAmount);
-        deposits[borrower] = FHE.sub(borrowerDeposits, encryptedRepayAmount); // Simplified
+        debts[borrower] = TFHE.sub(borrowerDebt, encryptedRepayAmount);
+        deposits[borrower] = TFHE.sub(borrowerDeposits, encryptedRepayAmount); // Simplified
         
         // Update liquidator's position
-        deposits[msg.sender] = FHE.add(deposits[msg.sender], encryptedRepayAmount);
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], encryptedRepayAmount);
         
         // Transfer repayment from liquidator to contract (commented out for compilation)
         // token.transferFromEncrypted(msg.sender, address(this), repayAmount);

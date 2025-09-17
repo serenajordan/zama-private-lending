@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 pragma solidity ^0.8.25;
 
-import { FHE } from "@fhevm/solidity";
 import { ZamaConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 import "./ConfidentialUSD.sol";
+import { TFHE } from "./utils/TFHEOps.sol";
 
 /**
  * @title PrivateLendingPool
@@ -14,8 +14,6 @@ import "./ConfidentialUSD.sol";
  * FHEVM integration will be added once version compatibility is resolved.
  */
 contract PrivateLendingPool {
-    using FHE for euint64;
-    using FHE for ebool;
 
     // State variables
     ConfidentialUSD public token;
@@ -41,10 +39,10 @@ contract PrivateLendingPool {
      * @param amount Encrypted amount to deposit
      */
     function deposit(bytes32 amount) external {
-        euint64 encryptedAmount = FHE.asEuint64(amount);
-        
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
+
         // Add to user's deposits
-        deposits[msg.sender] = deposits[msg.sender] + encryptedAmount;
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], encryptedAmount);
         
         // Transfer tokens from user to this contract
         // Note: This requires the user to approve this contract first
@@ -58,23 +56,24 @@ contract PrivateLendingPool {
      * @param amount Encrypted amount to borrow
      */
     function borrow(bytes32 amount) external {
-        euint64 encryptedAmount = FHE.asEuint64(amount);
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
         euint64 userDeposits = deposits[msg.sender];
         euint64 userDebts = debts[msg.sender];
-        
+
         // Calculate new debt
-        euint64 newDebt = userDebts + encryptedAmount;
-        
+        euint64 newDebt = TFHE.add(userDebts, encryptedAmount);
+
         // Check LTV (this is simplified - in practice you'd need price oracles)
         // For now, we assume 1:1 ratio and check that debt doesn't exceed 70% of deposits
-        euint64 maxBorrow = userDeposits * FHE.asEuint64(MAX_LTV) / FHE.asEuint64(10000);
-        
+        euint64 maxBorrow =
+            TFHE.div(TFHE.mul(userDeposits, TFHE.asEuint64(uint256(MAX_LTV))), uint64(10000));
+
         // Verify borrowing capacity (this would be done privately in real implementation)
-        ebool canBorrow = newDebt.lte(maxBorrow);
-        require(FHE.decrypt(canBorrow), "Insufficient collateral");
-        
-        // Update debt
-        debts[msg.sender] = newDebt;
+        ebool canBorrow = TFHE.lte(newDebt, maxBorrow);
+        TFHE.req(canBorrow, "Insufficient collateral");
+
+        // Update debt using encrypted conditional selection
+        debts[msg.sender] = TFHE.cmux(canBorrow, newDebt, maxBorrow);
         
         // Transfer tokens to user
         token.transferEncrypted(msg.sender, amount);
@@ -87,15 +86,15 @@ contract PrivateLendingPool {
      * @param amount Encrypted amount to repay
      */
     function repay(bytes32 amount) external {
-        euint64 encryptedAmount = FHE.asEuint64(amount);
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
         euint64 userDebt = debts[msg.sender];
-        
+
         // Ensure not repaying more than owed
-        ebool validRepayment = encryptedAmount.lte(userDebt);
-        require(FHE.decrypt(validRepayment), "Repaying more than owed");
-        
-        // Update debt
-        debts[msg.sender] = userDebt - encryptedAmount;
+        ebool validRepayment = TFHE.lte(encryptedAmount, userDebt);
+        TFHE.req(validRepayment, "Repaying more than owed");
+
+        // Update debt, preserving previous value if repayment is invalid
+        debts[msg.sender] = TFHE.cmux(validRepayment, TFHE.sub(userDebt, encryptedAmount), userDebt);
         
         // Transfer tokens from user to this contract
         token.transferFromEncrypted(msg.sender, address(this), amount);
@@ -114,7 +113,7 @@ contract PrivateLendingPool {
         euint64 userDeposits = deposits[msg.sender];
         euint64 userDebt = debts[msg.sender];
         
-        return (FHE.decrypt(userDeposits), FHE.decrypt(userDebt));
+        return (TFHE.decrypt(userDeposits), TFHE.decrypt(userDebt));
     }
 
     /**
@@ -126,8 +125,8 @@ contract PrivateLendingPool {
         euint64 userDeposits = deposits[user];
         euint64 userDebt = debts[user];
         
-        uint64 depositsDecrypted = FHE.decrypt(userDeposits);
-        uint64 debtDecrypted = FHE.decrypt(userDebt);
+        uint64 depositsDecrypted = TFHE.decrypt(userDeposits);
+        uint64 debtDecrypted = TFHE.decrypt(userDebt);
         
         if (debtDecrypted == 0) {
             return type(uint256).max; // No debt = infinite health
@@ -155,28 +154,31 @@ contract PrivateLendingPool {
     function liquidate(address borrower, bytes32 repayAmount) external {
         require(this.canLiquidate(borrower), "Position is healthy");
         
-        euint64 encryptedRepayAmount = FHE.asEuint64(repayAmount);
+        euint64 encryptedRepayAmount = TFHE.asEuint64(repayAmount);
         euint64 borrowerDebt = debts[borrower];
         euint64 borrowerDeposits = deposits[borrower];
-        
+
         // Ensure not repaying more than the debt
-        ebool validLiquidation = encryptedRepayAmount.lte(borrowerDebt);
-        require(FHE.decrypt(validLiquidation), "Repay amount exceeds debt");
-        
+        ebool validLiquidation = TFHE.lte(encryptedRepayAmount, borrowerDebt);
+        TFHE.req(validLiquidation, "Repay amount exceeds debt");
+
         // Calculate collateral to seize (with liquidation bonus)
         // Simplified: 1:1 ratio + 10% bonus
-        euint64 collateralToSeize = encryptedRepayAmount * FHE.asEuint64(110) / FHE.asEuint64(100);
-        
+        euint64 collateralToSeize =
+            TFHE.div(TFHE.mul(encryptedRepayAmount, TFHE.asEuint64(uint256(110))), uint64(100));
+
         // Ensure there's enough collateral
-        ebool sufficientCollateral = collateralToSeize.lte(borrowerDeposits);
-        require(FHE.decrypt(sufficientCollateral), "Insufficient collateral");
-        
-        // Update borrower's position
-        debts[borrower] = borrowerDebt - encryptedRepayAmount;
-        deposits[borrower] = borrowerDeposits - collateralToSeize;
-        
+        ebool sufficientCollateral = TFHE.lte(collateralToSeize, borrowerDeposits);
+        TFHE.req(sufficientCollateral, "Insufficient collateral");
+
+        // Update borrower's position with encrypted conditional guards
+        debts[borrower] =
+            TFHE.cmux(validLiquidation, TFHE.sub(borrowerDebt, encryptedRepayAmount), borrowerDebt);
+        deposits[borrower] =
+            TFHE.cmux(sufficientCollateral, TFHE.sub(borrowerDeposits, collateralToSeize), borrowerDeposits);
+
         // Update liquidator's position
-        deposits[msg.sender] = deposits[msg.sender] + collateralToSeize;
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], collateralToSeize);
         
         // Transfer repayment from liquidator to contract
         token.transferFromEncrypted(msg.sender, address(this), repayAmount);
