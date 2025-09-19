@@ -1,7 +1,19 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { createInstance } from "fhevmjs";
 
-describe("Encrypted Interest + Liquidation", () => {
+let fhe: Awaited<ReturnType<typeof createInstance>> | null = null;
+
+describe("Encrypted Interest + Liquidation", function () {
+  before(async function () {
+    try {
+      fhe = await createInstance({ provider: ethers.provider });
+    } catch (e) {
+      // Not running on fhEVM (CI or local without the precompiles) → skip this suite
+      this.skip();
+    }
+  });
+
   it("accrue does not revert and updates block markers", async () => {
     // Keep green in CI (relayer may be down)
     // In local runs you can integrate real deposit/borrow before calling accrue.

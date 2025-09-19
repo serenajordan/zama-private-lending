@@ -1,7 +1,19 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { createInstance } from "fhevmjs";
 
-describe("PrivateLendingPool (FHE basics)", () => {
+let fhe: Awaited<ReturnType<typeof createInstance>> | null = null;
+
+describe("PrivateLendingPool — encrypted invariants", function () {
+  before(async function () {
+    try {
+      fhe = await createInstance({ provider: ethers.provider });
+    } catch (e) {
+      // Not running on fhEVM (CI or local without the precompiles) → skip this suite
+      this.skip();
+    }
+  });
+
   it("deposits/borrows/repays with encrypted amounts", async () => {
     // NOTE: keep amounts tiny; we validate tx success, not service availability.
     // If relayer is down in CI, mark test as skipped but keep locally runnable.
