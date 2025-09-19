@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
-import PoolArtifact from "@/abis/PrivateLendingPool.json";
-import TokenArtifact from "@/abis/ConfidentialUSD.json";
+import PoolAbi from "@/abis/PrivateLendingPool.json";
+import TokenAbi from "@/abis/ConfidentialUSD.json";
 
 export const POOL_ADDR  = process.env.NEXT_PUBLIC_POOL!;
 export const TOKEN_ADDR = process.env.NEXT_PUBLIC_TOKEN!;
@@ -27,8 +27,8 @@ export async function getPool(s?: ethers.Signer) {
       console.warn("[warn] Wallet RPC returned no code but public RPC sees contract code. Continuing with wallet provider.");
     }
   }
-  // @ts-ignore
-  return new ethers.Contract(POOL_ADDR, (PoolArtifact as any).abi, signer);
+  // ABI JSON is exported as array; pass directly
+  return new ethers.Contract(POOL_ADDR, PoolAbi as unknown as ethers.InterfaceAbi, signer);
 }
 
 export async function getToken(s?: ethers.Signer) {
@@ -44,8 +44,7 @@ export async function getToken(s?: ethers.Signer) {
       console.warn("[warn] Wallet RPC returned no code but public RPC sees token code. Continuing.");
     }
   }
-  // @ts-ignore
-  return new ethers.Contract(TOKEN_ADDR, (TokenArtifact as any).abi, signer);
+  return new ethers.Contract(TOKEN_ADDR, TokenAbi as unknown as ethers.InterfaceAbi, signer);
 }
 
 // Handy browser debug hook (attachable from layout)
