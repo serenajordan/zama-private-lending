@@ -1,7 +1,6 @@
-import { createInstance } from "fhevmjs";
 import { ethers } from "hardhat";
 
-let fheInstance: Awaited<ReturnType<typeof createInstance>> | null = null;
+let fheInstance: any = null;
 
 /**
  * Get or create fhEVM instance for encrypted operations
@@ -10,6 +9,16 @@ let fheInstance: Awaited<ReturnType<typeof createInstance>> | null = null;
  */
 export async function getFheInstance(provider?: any) {
   if (!fheInstance) {
+    let createInstance: any;
+    try {
+      ({ createInstance } = await import("fhevmjs"));
+    } catch (e) {
+      throw new Error(
+        "fhEVM precompiles not available. " +
+        "These tests require fhEVM runtime. " +
+        "Run with fhEVM-enabled network or skip encrypted tests."
+      );
+    }
     try {
       fheInstance = await createInstance({ 
         provider: provider || ethers.provider 
@@ -32,6 +41,7 @@ export async function getFheInstance(provider?: any) {
  */
 export async function isFhevmAvailable(provider?: any): Promise<boolean> {
   try {
+    const { createInstance } = await import("fhevmjs");
     await createInstance({ provider: provider || ethers.provider });
     return true;
   } catch {

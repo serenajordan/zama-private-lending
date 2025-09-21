@@ -1,14 +1,11 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { createInstance } from "fhevmjs";
-import { maybeSkipIfNoFHEVM } from "../utils/fhe-env";
-
-let fhe: Awaited<ReturnType<typeof createInstance>> | null = null;
+import { maybeInitFHEVMOrSkip } from "./utils/fhe-env";
 
 describe("Encrypted Interest + Liquidation", function () {
+  let fhe: any;
   before(async function () {
-    await maybeSkipIfNoFHEVM(this);
-    fhe = await createInstance({ provider: ethers.provider });
+    fhe = await maybeInitFHEVMOrSkip(this);
   });
 
   it("accrue does not revert and updates block markers", async () => {

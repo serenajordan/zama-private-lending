@@ -1,15 +1,23 @@
-import { createInstance } from "fhevmjs";
 import { ethers } from "hardhat";
 
 /**
- * Helper to auto-skip encrypted tests when fhEVM is not available
- * @param ctx - Mocha context (this from describe block)
+ * Try to init fhEVM; if unavailable, skip the suite gracefully.
+ * Returns the fhevmjs instance or null (when skipped).
  */
-export async function maybeSkipIfNoFHEVM(ctx: Mocha.Context) {
+export async function maybeInitFHEVMOrSkip(ctx: Mocha.Context): Promise<any | null> {
+  let createInstance: any;
   try {
-    await createInstance({ provider: ethers.provider });
+    // Lazy import so Node doesn't resolve fhevmjs when not installed
+    ({ createInstance } = await import("fhevmjs"));
   } catch (e) {
-    // Not running on fhEVM (CI or local without the precompiles) → skip this suite
-    ctx.skip();
+    ctx.skip(); // fhevmjs package not present on CI
+    return null;
+  }
+  try {
+    const instance = await createInstance({ provider: ethers.provider });
+    return instance;
+  } catch (e) {
+    ctx.skip(); // running on non-fhEVM chain
+    return null;
   }
 }
