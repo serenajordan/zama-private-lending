@@ -1,5 +1,9 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { createInstance } from "fhevmjs";
+import { maybeSkipIfNoFHEVM } from "../utils/fhe-env";
+
+let fhe: Awaited<ReturnType<typeof createInstance>> | null = null;
 
 const BASIS_POINTS = 10_000n;
 const MAX_LTV_BPS = 7_000n;
@@ -13,7 +17,12 @@ const toEncrypted = (value: bigint | number) => {
 
 const fromEncrypted = (value: any): bigint => ethers.toBigInt(value);
 
-describe("PrivateLendingPool (encrypted invariants)", () => {
+describe("PrivateLendingPool (encrypted invariants)", function () {
+  before(async function () {
+    await maybeSkipIfNoFHEVM(this);
+    fhe = await createInstance({ provider: ethers.provider });
+  });
+
   async function deployFixture() {
     const [deployer, borrower, liquidator] = await ethers.getSigners();
 
