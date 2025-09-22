@@ -25,6 +25,8 @@ contract PrivateLendingPool {
 
     // Encrypted LTV ratio (scaled like RAY). Example: 0.7 * RAY for 70% LTV
     euint64 private ltvRay;
+    // Encrypted liquidation threshold (scaled like RAY). Example: 0.8 * RAY
+    euint64 private liqThresholdRay;
 
     // External encrypted price feed (price scaled like RAY)
     IEncryptedPriceFeed public priceFeed;
@@ -43,9 +45,10 @@ contract PrivateLendingPool {
     constructor(address _token, address _priceFeed) {
         token = ConfidentialUSD(_token);
         priceFeed = IEncryptedPriceFeed(_priceFeed);
-        // Default rate 0 and LTV 70%
+        // Default rate 0 and LTV/thresholds
         ratePerBlockRay = TFHE.asEuint64(uint64(0));
         ltvRay = TFHE.asEuint64(uint64(700_000_000)); // 0.7 * 1e9
+        liqThresholdRay = TFHE.asEuint64(uint64(800_000_000)); // 0.8 * 1e9
     }
 
     function setPriceFeed(address _priceFeed) external {
@@ -54,6 +57,10 @@ contract PrivateLendingPool {
 
     function setLtvRay(uint64 rayScaled) external {
         ltvRay = TFHE.asEuint64(rayScaled);
+    }
+
+    function setLiqThresholdRay(uint64 rayScaled) external {
+        liqThresholdRay = TFHE.asEuint64(rayScaled);
     }
 
     /**
@@ -157,30 +164,30 @@ contract PrivateLendingPool {
         euint64 borrowerDebt = debts[borrower];
         euint64 borrowerDeposits = deposits[borrower];
 
-        ebool liquidatable = _isLiquidatable(borrowerDeposits, borrowerDebt);
+        // Compute encrypted health via price and threshold: scaleMul(collateralValue, threshold) < debt
+        euint64 price = TFHE.asEuint64(priceFeed.rawPrice());
+        euint64 collateralValue = MathEncrypted.scaleMul(borrowerDeposits, price);
+        euint64 lhs = MathEncrypted.scaleMul(collateralValue, liqThresholdRay);
+        ebool liquidatable = TFHE.lt(lhs, borrowerDebt);
         TFHE.req(liquidatable, "Position healthy");
 
+        // Clamp repay to debt using cmux so we never underflow
         ebool repayWithinDebt = TFHE.lte(encryptedRepayAmount, borrowerDebt);
-        TFHE.req(repayWithinDebt, "Repay amount exceeds debt");
+        euint64 repayClamped = TFHE.cmux(repayWithinDebt, encryptedRepayAmount, borrowerDebt);
 
         euint64 collateralToSeize = TFHE.div(
-            TFHE.mul(encryptedRepayAmount, LIQUIDATION_BONUS_BPS),
+            TFHE.mul(repayClamped, LIQUIDATION_BONUS_BPS),
             BASIS_POINTS
         );
 
+        // Clamp collateral seize to available deposits
         ebool sufficientCollateral = TFHE.lte(collateralToSeize, borrowerDeposits);
-        TFHE.req(sufficientCollateral, "Insufficient collateral");
+        euint64 seizeClamped = TFHE.cmux(sufficientCollateral, collateralToSeize, borrowerDeposits);
 
-        debts[borrower] = TFHE.cmux(repayWithinDebt, TFHE.sub(borrowerDebt, encryptedRepayAmount), borrowerDebt);
-        deposits[borrower] = TFHE.cmux(
-            sufficientCollateral,
-            TFHE.sub(borrowerDeposits, collateralToSeize),
-            borrowerDeposits
-        );
-
-        deposits[msg.sender] = TFHE.add(deposits[msg.sender], collateralToSeize);
-
-        // token.transferFromEncrypted(msg.sender, address(this), repayAmount);
+        // Update state in one go to reduce stack
+        debts[borrower] = TFHE.sub(borrowerDebt, repayClamped);
+        deposits[borrower] = TFHE.sub(borrowerDeposits, seizeClamped);
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], seizeClamped);
 
         emit Liquidation(msg.sender, borrower, repayAmount);
     }
