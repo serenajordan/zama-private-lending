@@ -6,6 +6,10 @@ import "./ConfidentialUSD.sol";
 import { TFHE } from "./utils/TFHEOps.sol";
 import { MathEncrypted } from "./libraries/MathEncrypted.sol";
 
+interface IEncryptedPriceFeed {
+    function rawPrice() external view returns (bytes32);
+}
+
 /**
  * @title PrivateLendingPool
  * @dev Confidential lending pool ensuring all sensitive values stay encrypted.
@@ -19,6 +23,12 @@ contract PrivateLendingPool {
     // Encrypted per-block interest rate in RAY (1e9) fixed-point.
     euint64 private ratePerBlockRay;
 
+    // Encrypted LTV ratio (scaled like RAY). Example: 0.7 * RAY for 70% LTV
+    euint64 private ltvRay;
+
+    // External encrypted price feed (price scaled like RAY)
+    IEncryptedPriceFeed public priceFeed;
+
     uint64 private constant BASIS_POINTS = 10_000;
     uint64 public constant MAX_LTV_BPS = 7_000;
     uint64 public constant LIQUIDATION_THRESHOLD_BPS = 8_000;
@@ -30,10 +40,20 @@ contract PrivateLendingPool {
     event Liquidation(address indexed liquidator, address indexed borrower, bytes32 encryptedAmount);
     event InterestAccrued(address indexed user, bytes32 rateBps);
 
-    constructor(address _token) {
+    constructor(address _token, address _priceFeed) {
         token = ConfidentialUSD(_token);
-        // Default rate 0
+        priceFeed = IEncryptedPriceFeed(_priceFeed);
+        // Default rate 0 and LTV 70%
         ratePerBlockRay = TFHE.asEuint64(uint64(0));
+        ltvRay = TFHE.asEuint64(uint64(700_000_000)); // 0.7 * 1e9
+    }
+
+    function setPriceFeed(address _priceFeed) external {
+        priceFeed = IEncryptedPriceFeed(_priceFeed);
+    }
+
+    function setLtvRay(uint64 rayScaled) external {
+        ltvRay = TFHE.asEuint64(rayScaled);
     }
 
     /**
@@ -50,7 +70,7 @@ contract PrivateLendingPool {
     }
 
     /**
-     * @dev Borrow against encrypted collateral, enforcing MAX_LTV_BPS cap.
+     * @dev Borrow against encrypted collateral with full encrypted LTV gating.
      */
     function borrow(bytes32 amount) external {
         _accrue(msg.sender);
@@ -59,9 +79,13 @@ contract PrivateLendingPool {
         euint64 userDebt = debts[msg.sender];
 
         euint64 newDebt = TFHE.add(userDebt, encryptedAmount);
-        euint64 maxBorrow = _maxBorrow(userDeposits);
-        ebool canBorrow = TFHE.lte(newDebt, maxBorrow);
 
+        // Fetch encrypted price and compute collateral value and max borrow
+        euint64 price = TFHE.asEuint64(priceFeed.rawPrice());
+        euint64 collateralValue = MathEncrypted.scaleMul(userDeposits, price);
+        euint64 maxBorrow = MathEncrypted.scaleMul(collateralValue, ltvRay);
+
+        ebool canBorrow = TFHE.lte(newDebt, maxBorrow);
         TFHE.req(canBorrow, "Insufficient collateral");
         debts[msg.sender] = TFHE.cmux(canBorrow, newDebt, userDebt);
 
@@ -161,16 +185,10 @@ contract PrivateLendingPool {
         emit Liquidation(msg.sender, borrower, repayAmount);
     }
 
-    /**
-     * @dev Return caller's encrypted position for off-chain inspection.
-     */
     function viewMyPosition() external view returns (bytes32, bytes32) {
         return _peekPosition(msg.sender);
     }
 
-    /**
-     * @dev Return a user's encrypted position for testing and analytics.
-     */
     function peekPosition(address user) external view returns (bytes32, bytes32) {
         return _peekPosition(user);
     }
