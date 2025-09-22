@@ -7,7 +7,7 @@ import "encrypted-types/EncryptedTypes.sol";
 /**
  * @title MathEncrypted
  * @dev Minimal fixed-point helpers for encrypted arithmetic.
- * NOTE: These helpers operate on TFHE encrypted 64-bit integers (euint64).
+ * NOTE: These helpers operate on TFHE encrypted 64 bit integers (type euint64).
  *       We use a small fixed-point scale RAY = 1e9 to keep values in range.
  *       Rounding: scaleMul rounds down on the final division; scaleDiv rounds down.
  *       These semantics are acceptable for conservative interest calculations.

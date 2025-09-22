@@ -118,13 +118,11 @@ contract PrivateLendingPool {
      */
     function _accrue(address user) private {
         euint64 oldDebt = debts[user];
-        if (TFHE.decrypt(oldDebt) == 0) {
-            return;
-        }
+        ebool hasDebt = TFHE.gt(oldDebt, TFHE.asEuint64(0));
         euint64 onePlusRate = TFHE.add(ratePerBlockRay, MathEncrypted.RAY());
         euint64 tmp = MathEncrypted.scaleMul(oldDebt, onePlusRate);
         euint64 newDebt = MathEncrypted.scaleDiv(tmp, MathEncrypted.RAY());
-        debts[user] = newDebt;
+        debts[user] = TFHE.cmux(hasDebt, newDebt, oldDebt);
     }
 
     /**
