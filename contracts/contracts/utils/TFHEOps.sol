@@ -33,6 +33,7 @@ library TFHE {
         return FHE.div(a, b);
     }
 
+
     function eq(euint64 a, euint64 b) internal returns (ebool) {
         return FHE.eq(a, b);
     }
