@@ -30,6 +30,11 @@ export default {
     hardhat: {
       chainId: 31337,
     },
+    fhevm: {
+      url: process.env.FHEVM_RPC_URL || "",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 0x1a1, // 417 in hex, common fhEVM testnet chainId
+    },
   },
   mocha: {
     timeout: 120000, // 120 seconds

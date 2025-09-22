@@ -97,6 +97,43 @@ jobs:
         cd contracts
         pnpm hardhat test
         
+  test-contracts-fhevm:
+    name: Test Contracts (fhEVM)
+    runs-on: ubuntu-latest
+    needs: compile-contracts
+    if: ${{ secrets.FHEVM_RPC_URL != '' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Enable pnpm (corepack)
+      run: corepack enable
+      
+    - name: Cache pnpm store (if lockfile present)
+      if: ${{ hashFiles('pnpm-lock.yaml') != '' }}
+      uses: actions/cache@v4
+      with:
+        path: ~/.pnpm-store
+        key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-${{ runner.os }}-
+          
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile || pnpm install
+      
+    - name: Run fhEVM contract tests
+      env:
+        FHEVM_RPC_URL: ${{ secrets.FHEVM_RPC_URL }}
+      run: |
+        cd contracts
+        pnpm hardhat test --network fhevm
+        
   test-frontend:
     name: Test Frontend
     runs-on: ubuntu-latest
