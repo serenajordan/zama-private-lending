@@ -11,7 +11,8 @@ export default {
         enabled: true,
         runs: 200
       },
-      evmVersion: "paris"
+      evmVersion: "paris",
+      viaIR: true
     }
   },
   gasReporter: { 
