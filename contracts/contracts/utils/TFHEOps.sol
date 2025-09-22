@@ -54,10 +54,6 @@ library TFHE {
         return FHE.ge(a, b);
     }
 
-    function asEuint64(uint256 value) internal returns (euint64) {
-        return FHE.asEuint64(uint64(value));
-    }
-
     function asEuint64(uint64 value) internal returns (euint64) {
         return FHE.asEuint64(value);
     }
