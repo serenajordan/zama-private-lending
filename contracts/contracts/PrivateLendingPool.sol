@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import "encrypted-types/EncryptedTypes.sol";
 import "./ConfidentialUSD.sol";
 import { TFHE } from "./utils/TFHEOps.sol";
+import { MathEncrypted } from "./libraries/MathEncrypted.sol";
 
 /**
  * @title PrivateLendingPool
@@ -15,6 +16,8 @@ contract PrivateLendingPool {
 
     mapping(address => euint64) private deposits;
     mapping(address => euint64) private debts;
+    // Encrypted per-block interest rate in RAY (1e9) fixed-point.
+    euint64 private ratePerBlockRay;
 
     uint64 private constant BASIS_POINTS = 10_000;
     uint64 public constant MAX_LTV_BPS = 7_000;
@@ -29,6 +32,8 @@ contract PrivateLendingPool {
 
     constructor(address _token) {
         token = ConfidentialUSD(_token);
+        // Default rate 0
+        ratePerBlockRay = TFHE.asEuint64(uint64(0));
     }
 
     /**
@@ -48,6 +53,7 @@ contract PrivateLendingPool {
      * @dev Borrow against encrypted collateral, enforcing MAX_LTV_BPS cap.
      */
     function borrow(bytes32 amount) external {
+        _accrue(msg.sender);
         euint64 encryptedAmount = TFHE.asEuint64(amount);
         euint64 userDeposits = deposits[msg.sender];
         euint64 userDebt = debts[msg.sender];
@@ -68,6 +74,7 @@ contract PrivateLendingPool {
      * @dev Repay encrypted debt without ever allowing a negative balance.
      */
     function repay(bytes32 amount) external {
+        _accrue(msg.sender);
         euint64 encryptedAmount = TFHE.asEuint64(amount);
         euint64 userDebt = debts[msg.sender];
 
@@ -96,6 +103,28 @@ contract PrivateLendingPool {
         debts[user] = newDebt;
 
         emit InterestAccrued(user, rateBps);
+    }
+
+    /**
+     * @dev Set the encrypted per-block interest rate (RAY scaled). For demo, accept plaintext uint64.
+     */
+    function setRatePerBlock(uint64 rayScaled) external {
+        ratePerBlockRay = TFHE.asEuint64(rayScaled);
+    }
+
+    /**
+     * @dev Accrue per-block interest onto user's debt using RAY fixed-point helpers.
+     * newDebt = (oldDebt * (RAY + rate)) / RAY
+     */
+    function _accrue(address user) private {
+        euint64 oldDebt = debts[user];
+        if (TFHE.decrypt(oldDebt) == 0) {
+            return;
+        }
+        euint64 onePlusRate = TFHE.add(ratePerBlockRay, MathEncrypted.RAY());
+        euint64 tmp = MathEncrypted.scaleMul(oldDebt, onePlusRate);
+        euint64 newDebt = MathEncrypted.scaleDiv(tmp, MathEncrypted.RAY());
+        debts[user] = newDebt;
     }
 
     /**
