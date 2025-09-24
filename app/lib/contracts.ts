@@ -2,8 +2,8 @@ import { ethers } from "ethers";
 import PoolAbi from "@/abis/PrivateLendingPool.json";
 import TokenAbi from "@/abis/ConfidentialUSD.json";
 
-export const POOL_ADDR  = process.env.NEXT_PUBLIC_POOL!;
-export const TOKEN_ADDR = process.env.NEXT_PUBLIC_TOKEN!;
+export const POOL_ADDR  = process.env.NEXT_PUBLIC_POOL || "0xE1Cf0987eeF9e41bA6e7f987deb82a5AC5743c96";
+export const TOKEN_ADDR = process.env.NEXT_PUBLIC_TOKEN || "0x4b8a12Ce55357Fb1A8cf9d7BB2D8c52E91edA7E9";
 
 export async function getSigner() {
   // @ts-ignore

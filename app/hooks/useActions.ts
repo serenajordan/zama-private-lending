@@ -100,7 +100,7 @@ export function useActions() {
       // Encrypt the amount for the deposit call
       const enc = await encryptU64(u64);
       
-      // Call deposit function with encrypted amount
+      // Call deposit function with encrypted amount (contract expects bytes32)
       const tx = await pool.deposit(enc);
       toast.success(`Deposit transaction sent! Hash: ${tx.hash.slice(0, 10)}...`);
       const receipt = await tx.wait();

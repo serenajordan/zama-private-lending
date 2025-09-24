@@ -5,6 +5,11 @@
         "internalType": "address",
         "name": "_token",
         "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_priceFeed",
+        "type": "address"
       }
     ],
     "stateMutability": "nonpayable",
@@ -21,9 +26,9 @@
       },
       {
         "indexed": false,
-        "internalType": "bytes32",
-        "name": "encryptedAmount",
-        "type": "bytes32"
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       }
     ],
     "name": "Borrow",
@@ -40,9 +45,9 @@
       },
       {
         "indexed": false,
-        "internalType": "bytes32",
-        "name": "encryptedAmount",
-        "type": "bytes32"
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       }
     ],
     "name": "Deposit",
@@ -65,9 +70,9 @@
       },
       {
         "indexed": false,
-        "internalType": "bytes32",
-        "name": "encryptedAmount",
-        "type": "bytes32"
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       }
     ],
     "name": "Liquidation",
@@ -84,9 +89,9 @@
       },
       {
         "indexed": false,
-        "internalType": "bytes32",
-        "name": "encryptedAmount",
-        "type": "bytes32"
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       }
     ],
     "name": "Repay",
@@ -119,23 +124,11 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "applyInterest",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "externalEuint64",
+        "internalType": "uint256",
         "name": "amount",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "inputProof",
-        "type": "bytes"
+        "type": "uint256"
       }
     ],
     "name": "borrow",
@@ -144,23 +137,10 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "calculateInterest",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "pure",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
-        "name": "user",
+        "name": "borrower",
         "type": "address"
       }
     ],
@@ -178,14 +158,9 @@
   {
     "inputs": [
       {
-        "internalType": "externalEuint64",
+        "internalType": "uint256",
         "name": "amount",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "inputProof",
-        "type": "bytes"
+        "type": "uint256"
       }
     ],
     "name": "deposit",
@@ -238,14 +213,9 @@
         "type": "address"
       },
       {
-        "internalType": "externalEuint64",
-        "name": "repayAmount",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "inputProof",
-        "type": "bytes"
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       }
     ],
     "name": "liquidate",
@@ -255,38 +225,26 @@
   },
   {
     "inputs": [],
-    "name": "pause",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
+    "name": "priceFeed",
+    "outputs": [
       {
-        "internalType": "externalEuint64",
-        "name": "amount",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "inputProof",
-        "type": "bytes"
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
-    "name": "repay",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "newThreshold",
+        "name": "amount",
         "type": "uint256"
       }
     ],
-    "name": "setLiquidationThreshold",
+    "name": "repay",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -309,14 +267,14 @@
     "name": "viewMyPosition",
     "outputs": [
       {
-        "internalType": "uint64",
+        "internalType": "uint256",
         "name": "",
-        "type": "uint64"
+        "type": "uint256"
       },
       {
-        "internalType": "uint64",
+        "internalType": "uint256",
         "name": "",
-        "type": "uint64"
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",

@@ -1,0 +1,11 @@
+:root {
+  --brand: #6C63FF;
+  --accent: #12B3C7;
+  --radius-xl: 1.25rem;
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --shadow-md: 0 8px 28px rgba(0,0,0,0.35); }
+}
+
+

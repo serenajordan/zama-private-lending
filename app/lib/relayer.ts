@@ -1,6 +1,8 @@
 // app/lib/relayer.ts
 // Client-only helpers for the FHE relayer
-// Temporary implementation to avoid SDK issues
+// Temporary implementation: simulate encryption by packing to bytes32
+
+// No ethers helpers to avoid BytesLike issues in browser bundles
 
 export async function relayerHealthy(): Promise<boolean> {
   if (typeof window === 'undefined') return false
@@ -39,10 +41,9 @@ export async function relayerHealthy(): Promise<boolean> {
   }
 }
 
-export async function encryptU64(value: bigint) {
-  // For now, return the raw value as a string
-  // The contract expects a uint64, so we'll pass the value directly
-  // TODO: Implement proper FHE encryption once SDK issues are resolved
-  console.log('[relayer] encryptU64 called with value:', value.toString())
-  return value.toString()
+export async function encryptU64(value: bigint | number | string): Promise<bigint> {
+  // For mock contracts, return the raw value as bigint
+  const big = BigInt(value);
+  console.log('[relayer] encryptU64 (mock) ->', big.toString());
+  return big;
 }

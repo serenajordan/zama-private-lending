@@ -16,35 +16,48 @@ async function main() {
   const tokenAddress = await token.getAddress();
   console.log(`✅ ConfidentialUSD deployed to: ${tokenAddress}`);
 
-  // Step 2: Deploy PrivateLendingPool with the token address
-  console.log("🏦 Deploying PrivateLendingPool...");
-  const PrivateLendingPoolFactory = await ethers.getContractFactory("PrivateLendingPool");
-  const privateLendingPool = await PrivateLendingPoolFactory.deploy(tokenAddress);
+  // Step 2: Deploy MockPriceFeed (for testing on regular EVM)
+  console.log("📊 Deploying MockPriceFeed...");
+  const PriceFeedFactory = await ethers.getContractFactory("MockPriceFeed");
+  const priceFeed = await PriceFeedFactory.deploy();
+  await priceFeed.waitForDeployment();
+  
+  const priceFeedAddress = await priceFeed.getAddress();
+  console.log(`✅ MockPriceFeed deployed to: ${priceFeedAddress}`);
+
+  // Step 3: Deploy PrivateLendingPoolMock (for testing on regular EVM)
+  console.log("🏦 Deploying PrivateLendingPoolMock...");
+  const PrivateLendingPoolFactory = await ethers.getContractFactory("PrivateLendingPoolMock");
+  const privateLendingPool = await PrivateLendingPoolFactory.deploy(tokenAddress, priceFeedAddress);
   await privateLendingPool.waitForDeployment();
   
   const poolAddress = await privateLendingPool.getAddress();
-  console.log(`✅ PrivateLendingPool deployed to: ${poolAddress}`);
+  console.log(`✅ PrivateLendingPoolMock deployed to: ${poolAddress}`);
 
-  // Step 3: Set the pool address on the token (so onlyPool checks succeed)
+  // Step 4: Set the pool address on the token (so onlyPool checks succeed)
   console.log("🔧 Setting pool address on token...");
   const setPoolTx = await token.setPool(poolAddress);
   await setPoolTx.wait();
   console.log(`✅ Token pool address set to: ${poolAddress}`);
 
-  // Step 4: Verify both addresses actually have code on Sepolia
+  // Step 5: Verify all addresses actually have code on Sepolia
   console.log("🔍 Verifying contract code on network...");
   const provider = ethers.provider;
   const tokenCode = await provider.getCode(tokenAddress);
   const poolCode = await provider.getCode(poolAddress);
+  const priceFeedCode = await provider.getCode(priceFeedAddress);
   if (tokenCode === "0x") { throw new Error(`No code at token address ${tokenAddress}`); }
   if (poolCode === "0x") { throw new Error(`No code at pool address ${poolAddress}`); }
+  if (priceFeedCode === "0x") { throw new Error(`No code at priceFeed address ${priceFeedAddress}`); }
   console.log(`✅ Token code length: ${tokenCode.length}`);
   console.log(`✅ Pool code length: ${poolCode.length}`);
+  console.log(`✅ PriceFeed code length: ${priceFeedCode.length}`);
 
   // Verify deployment
   console.log("\n📋 Deployment Summary:");
   console.log(`   ConfidentialUSD Token: ${tokenAddress}`);
-  console.log(`   PrivateLendingPool:   ${poolAddress}`);
+  console.log(`   PrivateLendingPoolMock: ${poolAddress}`);
+  console.log(`   MockPriceFeed:       ${priceFeedAddress}`);
   console.log(`   Deployer:             ${deployer.address}`);
   console.log(`   Network:              ${await ethers.provider.getNetwork().then(n => n.name)}`);
 
