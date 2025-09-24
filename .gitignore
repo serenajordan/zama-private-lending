@@ -109,3 +109,4 @@ Thumbs.db
 app/.env.local
 *.pem
 *.key
+_v0_src/
