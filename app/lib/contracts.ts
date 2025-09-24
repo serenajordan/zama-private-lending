@@ -1,68 +1,93 @@
-import { ethers } from "ethers";
-import PoolAbi from "@/abis/PrivateLendingPool.json";
-import TokenAbi from "@/abis/ConfidentialUSD.json";
+import { createPublicClient, createWalletClient, http, type Abi, type Address, getContract } from "viem"
+import { sepolia } from "viem/chains"
+import { useCallback, useMemo, useState } from "react"
+import { useAccount, usePublicClient, useWalletClient } from "wagmi"
+import { env, requireEnvAddresses } from "@/lib/env"
 
-export const POOL_ADDR  = process.env.NEXT_PUBLIC_POOL || "0xE1Cf0987eeF9e41bA6e7f987deb82a5AC5743c96";
-export const TOKEN_ADDR = process.env.NEXT_PUBLIC_TOKEN || "0x4b8a12Ce55357Fb1A8cf9d7BB2D8c52E91edA7E9";
+// Import ABIs from existing JSONs
+import PoolAbi from "@/abis/PrivateLendingPool.json"
+import TokenAbi from "@/abis/ConfidentialUSD.json"
 
-export async function getSigner() {
+export const publicClient = createPublicClient({
+  chain: sepolia,
+  transport: http(env.rpcUrl || undefined),
+})
+
+export function getWalletClient() {
+  if (typeof window === "undefined") return undefined
   // @ts-ignore
-  await window.ethereum.request({ method: "eth_requestAccounts" });
-  // @ts-ignore
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  return provider.getSigner();
+  const ethereum = window.ethereum
+  if (!ethereum) return undefined
+  return createWalletClient({ chain: sepolia, transport: http(env.rpcUrl || undefined) })
 }
 
-export async function getPool(s?: ethers.Signer) {
-  const signer = s ?? await getSigner();
-  const provider = signer.provider as ethers.BrowserProvider;
-  const code = await provider.getCode(POOL_ADDR);
-  if (code === "0x") {
-    // Double-check with a public Sepolia provider (guards against wallet RPC anomalies)
-    const pub = ethers.getDefaultProvider("sepolia");
-    const code2 = await pub.getCode(POOL_ADDR);
-    if (code2 === "0x") {
-      throw new Error("Pool address has no contract code on Sepolia (checked wallet RPC and public RPC). Check NEXT_PUBLIC_POOL and network.");
-    } else {
-      console.warn("[warn] Wallet RPC returned no code but public RPC sees contract code. Continuing with wallet provider.");
-    }
-  }
-  // ABI JSON is exported as array; pass directly
-  return new ethers.Contract(POOL_ADDR, PoolAbi as unknown as ethers.InterfaceAbi, signer);
-}
-
-export async function getToken(s?: ethers.Signer) {
-  const signer = s ?? await getSigner();
-  const provider = signer.provider as ethers.BrowserProvider;
-  const code = await provider.getCode(TOKEN_ADDR);
-  if (code === "0x") {
-    const pub = ethers.getDefaultProvider("sepolia");
-    const code2 = await pub.getCode(TOKEN_ADDR);
-    if (code2 === "0x") {
-      throw new Error("Token address has no contract code on Sepolia (checked wallet RPC and public RPC). Check NEXT_PUBLIC_TOKEN and network.");
-    } else {
-      console.warn("[warn] Wallet RPC returned no code but public RPC sees token code. Continuing.");
-    }
-  }
-  return new ethers.Contract(TOKEN_ADDR, TokenAbi as unknown as ethers.InterfaceAbi, signer);
-}
-
-// Handy browser debug hook (attachable from layout)
-export async function debugCodes() {
-  // @ts-ignore
-  const chainId = await window.ethereum.request({ method: "eth_chainId" });
-  // @ts-ignore
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const codePoolBrowser = await provider.getCode(POOL_ADDR);
-  const codeTokenBrowser = await provider.getCode(TOKEN_ADDR);
-  const pub = ethers.getDefaultProvider("sepolia");
-  const codePoolPublic = await pub.getCode(POOL_ADDR);
-  const codeTokenPublic = await pub.getCode(TOKEN_ADDR);
+export function detectFunctions(abi: Abi) {
+  const names = new Set((abi as any[]).filter((f) => f?.type === "function").map((f) => f.name))
+  const find = (candidates: string[]) => candidates.find((n) => names.has(n))
   return {
-    chainId,
-    POOL_ADDR,
-    TOKEN_ADDR,
-    browser: { poolLen: codePoolBrowser.length, tokenLen: codeTokenBrowser.length },
-    publicRPC: { poolLen: codePoolPublic.length, tokenLen: codeTokenPublic.length }
-  };
+    deposit: find(["deposit", "depositEncrypted"]),
+    borrow: find(["borrow", "borrowEncrypted"]),
+    repay: find(["repay", "repayEncrypted"]),
+    peekDeposit: find(["peekDeposit", "peekUserDeposit"]),
+    peekDebt: find(["peekDebt", "peekUserDebt"]),
+  } as const
+}
+
+export const PoolFns = detectFunctions(PoolAbi as Abi)
+
+export function getPoolContract() {
+  const { poolAddress } = requireEnvAddresses()
+  return getContract({ address: poolAddress as Address, abi: PoolAbi as Abi, client: publicClient })
+}
+
+export function getTokenContract() {
+  const { tokenAddress } = requireEnvAddresses()
+  return getContract({ address: tokenAddress as Address, abi: TokenAbi as Abi, client: publicClient })
+}
+
+export function usePoolRead<TArgs extends any[], TResult = unknown>(fn: string, args: TArgs) {
+  const { poolAddress } = requireEnvAddresses()
+  const read = useCallback(async () => {
+    return publicClient.readContract({ address: poolAddress as Address, abi: PoolAbi as Abi, functionName: fn as any, args: args as any }) as Promise<TResult>
+  }, [fn, JSON.stringify(args), poolAddress])
+  return { read }
+}
+
+export function usePoolWrite(fn: string) {
+  const { poolAddress } = requireEnvAddresses()
+  const [isPending, setPending] = useState(false)
+  const writeAsync = useCallback(async (args: any[]) => {
+    const wallet = getWalletClient()
+    if (!wallet) throw new Error("No wallet client")
+    setPending(true)
+    try {
+      const hash = await wallet.writeContract({ address: poolAddress as Address, abi: PoolAbi as Abi, functionName: fn as any, args: args as any })
+      return hash
+    } finally {
+      setPending(false)
+    }
+  }, [fn, poolAddress])
+  return { writeAsync, isPending }
+}
+
+export function useTokenWrite(fn: string) {
+  const { tokenAddress } = requireEnvAddresses()
+  const [isPending, setPending] = useState(false)
+  const writeAsync = useCallback(async (args: any[]) => {
+    const wallet = getWalletClient()
+    if (!wallet) throw new Error("No wallet client")
+    setPending(true)
+    try {
+      const hash = await wallet.writeContract({ address: tokenAddress as Address, abi: TokenAbi as Abi, functionName: fn as any, args: args as any })
+      return hash
+    } finally {
+      setPending(false)
+    }
+  }, [fn, tokenAddress])
+  return { writeAsync, isPending }
+}
+
+export function tokenHasFunction(name: string) {
+  const names = new Set((TokenAbi as any[]).filter((f) => f?.type === "function").map((f) => f.name))
+  return names.has(name)
 }

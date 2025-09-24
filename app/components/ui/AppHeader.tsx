@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/button"
 import { Wallet } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { env } from "@/lib/env"
 import { useState } from "react"
 
 export default function AppHeader() {
@@ -40,6 +42,10 @@ export default function AppHeader() {
             {/* Simple dot to avoid brand icon usage */}
             <span className="inline-block h-4 w-4 rounded-full bg-gray-800 dark:bg-gray-100" />
           </Button>
+
+          {(env.demo) && (
+            <Badge variant="secondary" className="rounded-xl">Demo mode</Badge>
+          )}
         </div>
       </div>
     </header>

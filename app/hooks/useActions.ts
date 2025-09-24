@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { getToken, getPool } from '@/lib/contracts';
+import { getTokenContract, getPoolContract } from '@/lib/contracts';
 import { getTokenDecimals } from '@/lib/tokenMeta';
 import { toU64Units, fromUnits } from '@/lib/amount';
 import { encryptU64, relayerHealthy } from '@/lib/relayer';
@@ -34,7 +34,7 @@ export function useActions() {
         throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
       }
 
-      const token = await getToken();
+      const token = getTokenContract();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
       
@@ -71,8 +71,8 @@ export function useActions() {
         throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
       }
       
-      const pool = await getPool();
-      const token = await getToken();
+      const pool = getPoolContract();
+      const token = getTokenContract();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
       
@@ -121,7 +121,7 @@ export function useActions() {
         throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
       }
       
-      const pool = await getPool();
+      const pool = getPoolContract();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
       
@@ -176,8 +176,8 @@ export function useActions() {
         throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
       }
       
-      const pool = await getPool();
-      const token = await getToken();
+      const pool = getPoolContract();
+      const token = getTokenContract();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
       

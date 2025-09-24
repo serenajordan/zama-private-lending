@@ -16,9 +16,18 @@ export async function hasFHEVM(provider: any): Promise<boolean> {
   }
 }
 
+async function importFHEVM() {
+  // Avoid static resolution so CI/vanilla envs don't need the package
+  try {
+    const dynamicImport = new Function("m", "return import(m)") as (m: string) => Promise<any>
+    return await dynamicImport("fhevmjs")
+  } catch (e) {
+    throw new Error("fhevmjs not available in this environment")
+  }
+}
+
 export async function encryptAmount64(value: bigint | number | string, account: string): Promise<{ encryptedInput: string; proof: string }> {
-  const { createInstance } = await import("fhevmjs")
-  // Intentionally do not import at top-level; CI safety
+  const { createInstance } = await importFHEVM()
   const inst = await createInstance({})
   const input = inst.createEncryptedInput(account)
   input.add64(toScaled(value))
@@ -28,13 +37,13 @@ export async function encryptAmount64(value: bigint | number | string, account: 
 
 // DEV ONLY helpers
 export async function reencryptDecode(bytes: string, secretKey?: string): Promise<string> {
-  const { createInstance } = await import("fhevmjs")
+  const { createInstance } = await importFHEVM()
   const inst = await createInstance({})
   return inst.reencrypt(bytes, secretKey)
 }
 
 export async function publicKeyHash(pubKey: string): Promise<`0x${string}`> {
-  const { createInstance } = await import("fhevmjs")
+  const { createInstance } = await importFHEVM()
   const inst = await createInstance({})
   return inst.getPublicKeyHash(pubKey)
 }
