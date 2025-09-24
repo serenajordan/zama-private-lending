@@ -19,7 +19,8 @@ export async function hasFHEVM(provider: any): Promise<boolean> {
 async function importFHEVM() {
   // Avoid static resolution so CI/vanilla envs don't need the package
   try {
-    const dynamicImport = new Function("m", "return import(m)") as (m: string) => Promise<any>
+    // Use eval to avoid webpack static analysis
+    const dynamicImport = eval('(m) => import(m)')
     return await dynamicImport("fhevmjs")
   } catch (e) {
     throw new Error("fhevmjs not available in this environment")

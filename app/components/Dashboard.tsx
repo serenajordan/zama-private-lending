@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Copy, Info, TrendingUp, TrendingDown, Minus, DollarSign, PiggyBank, CreditCard, Shield } from "lucide-react"

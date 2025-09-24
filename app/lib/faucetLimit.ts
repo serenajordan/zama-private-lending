@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { getToken } from "@/lib/contracts";
+import { getTokenContract, tokenHasFunction } from "@/lib/contracts";
 import { getTokenDecimals } from "@/lib/tokenMeta";
 
 /**
@@ -9,7 +9,7 @@ import { getTokenDecimals } from "@/lib/tokenMeta";
  *  - maxUnits: bigint in smallest units
  */
 export async function getFaucetMax() {
-  const token = await getToken();
+  const token = getTokenContract();
   const decimals = await getTokenDecimals();
 
   // Candidates to try (human strings). Adjust as needed.
@@ -21,8 +21,14 @@ export async function getFaucetMax() {
     const human = h.replace(",",".").trim();
     const units = ethers.parseUnits(human, decimals);
     try {
-      // v6: simulate gas usage to see if it would revert
-      await token.faucet.staticCall(units);
+      if (tokenHasFunction('faucet')) {
+        await token.simulate.faucet([units]);
+      } else if (tokenHasFunction('mint')) {
+        // Cannot simulate mint limit generically; assume small allowed
+        await token.simulate.mint(["0x0000000000000000000000000000000000000001", units]);
+      } else {
+        break;
+      }
       lastOk = { human, units };
     } catch {
       // first revert means we've hit/over the limit; stop

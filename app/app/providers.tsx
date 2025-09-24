@@ -1,34 +1,19 @@
 'use client';
+import * as React from 'react';
 import { ReactNode, useMemo } from 'react';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { sepolia } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@rainbow-me/rainbowkit/styles.css';
 import { RainbowKitProvider, getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { defineChain } from 'viem';
 
 import { RPC_URL, CHAIN_ID } from '@/lib/env';
-
-// Define custom chain if needed
-const customChain = CHAIN_ID !== sepolia.id ? defineChain({
-  id: CHAIN_ID,
-  name: 'fhEVM Sepolia',
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: {
-    default: { http: [RPC_URL] },
-    public: { http: [RPC_URL] },
-  },
-  blockExplorers: {
-    default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
-  },
-  testnet: true,
-}) : sepolia;
 
 const config = getDefaultConfig({
   appName: 'Zama Private Lending',
   projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID || 'YOUR_PROJECT_ID',
-  chains: [customChain],
-  transports: { [customChain.id]: http(RPC_URL) },
+  chains: [sepolia],
+  transports: { [sepolia.id]: http(RPC_URL) },
   ssr: true,
 });
 
@@ -38,7 +23,7 @@ export default function Providers({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider modalSize="compact" initialChain={customChain}>
+        <RainbowKitProvider modalSize="compact" initialChain={sepolia}>
           {children}
         </RainbowKitProvider>
       </QueryClientProvider>

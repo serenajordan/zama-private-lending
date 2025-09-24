@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import * as React from "react"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,8 +11,12 @@ import { Separator } from "@/components/ui/separator"
 import { Fence as Faucet, PiggyBank, CreditCard, RefreshCw, Send, Info, CheckCircle, AlertCircle } from "lucide-react"
 import { useEnhancedErrorHandling } from "@/components/enhanced-error-handling"
 import { PrivacyModal } from "@/components/privacy-modal"
-import { useAccount } from "wagmi"
-import { useActions } from "@/hooks/useActions"
+// import { useAccount } from "wagmi"
+// import { useActions } from "@/hooks/useActions"
+import { env } from "@/lib/env"
+import { useViewer } from "@/hooks/useViewer"
+import { usePoolWrite, PoolFns, useTokenWrite, tokenHasFunction } from "@/lib/contracts"
+import { encryptAmount64, hasFHEVM } from "@/lib/fhe"
 import { usePosition } from "@/hooks/usePosition"
 import { toast } from "sonner"
 import { relayerHealthy } from "@/lib/relayer"
@@ -40,9 +44,9 @@ function ActionCard({ title, description, icon: Icon, children }: ActionCardProp
 }
 
 export function ActionsPanel() {
-  const { isConnected } = useAccount()
+  const { isConnected, address } = require('wagmi').useAccount()
   const { showError, showSuccess, validateAmount, validateBalance, validateLTV } = useEnhancedErrorHandling()
-  const { faucet, deposit, borrow, repay, busy } = useActions()
+  const [busy, setBusy] = useState<string | null>(null)
   const { pos, refresh } = usePosition()
   const [faucetAmount, setFaucetAmount] = useState("")
   const [depositAmount, setDepositAmount] = useState("")
@@ -64,6 +68,14 @@ export function ActionsPanel() {
   const disabled = !isConnected || !isRelayerHealthy
 
 
+  const { writeAsync: tokenWrite } = useTokenWrite("")
+  const { writeAsync: poolWrite } = usePoolWrite("")
+
+  const withBusy = async (label: string, fn: () => Promise<void>) => {
+    setBusy(label)
+    try { await fn() } finally { setBusy(null) }
+  }
+
   const handleFaucet = async () => {
     if (!isConnected) {
       toast.error("Connect wallet to use faucet")
@@ -77,7 +89,16 @@ export function ActionsPanel() {
     }
 
     try {
-      await faucet(faucetAmount)
+      await withBusy('faucet', async () => {
+        if (tokenHasFunction("faucet")) {
+          await tokenWrite([BigInt(1_000_000)])
+        } else if (tokenHasFunction("mint")) {
+          await tokenWrite([address, BigInt(1_000_000)])
+        } else {
+          toast.error("No faucet on this network")
+          return
+        }
+      })
       setFaucetAmount("")
       // Refresh immediately and then again after a delay to ensure updates
       await refresh()
@@ -108,7 +129,17 @@ export function ActionsPanel() {
     }
 
     try {
-      await deposit(depositAmount)
+      await withBusy('deposit', async () => {
+        if (!address) throw new Error('Connect wallet')
+        if (env.demo || !(await hasFHEVM(window.ethereum))) {
+          toast.success(`Demo deposit of ${depositAmount}`)
+          return
+        }
+        const { encryptedInput, proof } = await encryptAmount64(depositAmount, address)
+        const fn = PoolFns.deposit
+        if (!fn) throw new Error('Deposit function not found')
+        await poolWrite([encryptedInput, proof])
+      })
       setDepositAmount("")
       // Refresh immediately and then again after a delay to ensure updates
       await refresh()
@@ -141,7 +172,17 @@ export function ActionsPanel() {
     }
 
     try {
-      await borrow(borrowAmount)
+      await withBusy('borrow', async () => {
+        if (!address) throw new Error('Connect wallet')
+        if (env.demo || !(await hasFHEVM(window.ethereum))) {
+          toast.success(`Demo borrow of ${borrowAmount}`)
+          return
+        }
+        const { encryptedInput, proof } = await encryptAmount64(borrowAmount, address)
+        const fn = PoolFns.borrow
+        if (!fn) throw new Error('Borrow function not found')
+        await poolWrite([encryptedInput, proof])
+      })
       setBorrowAmount("")
       // Refresh immediately and then again after a delay to ensure updates
       await refresh()
@@ -172,7 +213,17 @@ export function ActionsPanel() {
     }
 
     try {
-      await repay(repayAmount)
+      await withBusy('repay', async () => {
+        if (!address) throw new Error('Connect wallet')
+        if (env.demo || !(await hasFHEVM(window.ethereum))) {
+          toast.success(`Demo repay of ${repayAmount}`)
+          return
+        }
+        const { encryptedInput, proof } = await encryptAmount64(repayAmount, address)
+        const fn = PoolFns.repay
+        if (!fn) throw new Error('Repay function not found')
+        await poolWrite([encryptedInput, proof])
+      })
       setRepayAmount("")
       // Refresh immediately and then again after a delay to ensure updates
       await refresh()

@@ -4,40 +4,50 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useState } from "react"
-import { useAccount } from "wagmi"
-import { useTokenWrite, tokenHasFunction } from "@/lib/contracts"
-import { env } from "@/lib/env"
-import { Droplets } from "lucide-react"
+import { useAccount, useChainId } from "wagmi"
+import { requestFaucet } from "@/lib/contracts"
+import { env, CHAIN_ID } from "@/lib/env"
+import { Droplets, ExternalLink } from "lucide-react"
+import { toast } from "sonner"
 
 export default function FaucetCard() {
   const [isLoading, setIsLoading] = useState(false)
   const [lastFaucet, setLastFaucet] = useState<string | null>(null)
   const { address } = useAccount()
-  
-  const { writeAsync: faucetWrite } = useTokenWrite("faucet")
-  const { writeAsync: mintWrite } = useTokenWrite("mint")
+  const chainId = useChainId()
+  const isWrongNetwork = chainId !== CHAIN_ID
 
   const handleFaucet = async () => {
-    if (!address) return
+    if (!address) {
+      toast.error("Please connect your wallet")
+      return
+    }
+    
+    if (isWrongNetwork) {
+      toast.error("Please switch to the correct network")
+      return
+    }
     
     setIsLoading(true)
     try {
-      let hash: string
-      
-      if (tokenHasFunction("faucet")) {
-        // Try faucet function first
-        hash = await faucetWrite([BigInt(1_000_000)]) // 1M tokens
-      } else if (tokenHasFunction("mint")) {
-        // Fallback to mint (requires minter role)
-        hash = await mintWrite([address, BigInt(1_000_000)])
-      } else {
-        throw new Error("No faucet available on this network")
-      }
-      
+      const hash = await requestFaucet("1000", address) // 1000 tokens
       setLastFaucet(hash)
+      
+      toast.success("Faucet successful!", {
+        description: (
+          <a 
+            href={`https://sepolia.etherscan.io/tx/${hash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-blue-600 hover:underline"
+          >
+            View on Explorer <ExternalLink className="h-3 w-3" />
+          </a>
+        )
+      })
     } catch (error: any) {
       console.error("Faucet failed:", error)
-      alert(error.message || "Faucet failed")
+      toast.error(error.message || "Faucet failed")
     } finally {
       setIsLoading(false)
     }
@@ -95,10 +105,10 @@ export default function FaucetCard() {
 
         <Button
           onClick={handleFaucet}
-          disabled={!address || isLoading}
+          disabled={!address || isLoading || isWrongNetwork}
           className="w-full rounded-xl bg-[var(--brand)] hover:opacity-90 disabled:opacity-50"
         >
-          {isLoading ? "Processing..." : "Get Test Tokens"}
+          {isLoading ? "Processing..." : isWrongNetwork ? "Wrong Network" : "Get Test Tokens"}
         </Button>
       </div>
     </Card>

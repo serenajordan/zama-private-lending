@@ -19,6 +19,11 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: false,
   },
+  async redirects() {
+    return [
+      { source: '/app', destination: '/dashboard', permanent: false },
+    ];
+  },
   webpack: (config, { isServer }) => {
     // Suppress circular dependency warnings from fhEVM relayer SDK
     config.ignoreWarnings = [

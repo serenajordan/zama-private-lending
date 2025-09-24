@@ -58,7 +58,8 @@ export function usePoolWrite(fn: string) {
     if (!wallet) throw new Error("No wallet client")
     setPending(true)
     try {
-      const hash = await wallet.writeContract({ address: poolAddress as Address, abi: PoolAbi as Abi, functionName: fn as any, args: args as any })
+      const [account] = await wallet.getAddresses()
+      const hash = await wallet.writeContract({ address: poolAddress as Address, abi: PoolAbi as Abi, functionName: fn as any, args: args as any, account })
       return hash
     } finally {
       setPending(false)
@@ -75,7 +76,8 @@ export function useTokenWrite(fn: string) {
     if (!wallet) throw new Error("No wallet client")
     setPending(true)
     try {
-      const hash = await wallet.writeContract({ address: tokenAddress as Address, abi: TokenAbi as Abi, functionName: fn as any, args: args as any })
+      const [account] = await wallet.getAddresses()
+      const hash = await wallet.writeContract({ address: tokenAddress as Address, abi: TokenAbi as Abi, functionName: fn as any, args: args as any, account })
       return hash
     } finally {
       setPending(false)

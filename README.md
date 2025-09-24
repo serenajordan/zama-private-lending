@@ -16,6 +16,42 @@ cp app/.env.local.example app/.env.local   # fill TOKEN/POOL, optional RELAYER_U
 pnpm -C app dev
 ```
 
+## Environment Setup
+
+Create `app/.env.local` with the following variables:
+
+```bash
+# Required: fhEVM Sepolia RPC
+NEXT_PUBLIC_RPC_URL=https://rpc.sepolia.zama.ai
+
+# Required: Chain ID (11155111 for Sepolia)
+NEXT_PUBLIC_CHAIN_ID=11155111
+
+# Required: Contract addresses
+NEXT_PUBLIC_POOL=0x...  # PrivateLendingPool address
+NEXT_PUBLIC_TOKEN=0x... # ConfidentialUSD address
+
+# Optional: Demo mode (set to 0 for production)
+NEXT_PUBLIC_DEMO=0
+
+# Optional: Relayer URL for encrypted transactions
+NEXT_PUBLIC_RELAYER_URL=https://relayer.sepolia.zama.ai
+
+# Optional: WalletConnect Project ID
+NEXT_PUBLIC_WC_PROJECT_ID=your_project_id
+```
+
+### Getting Started with fhEVM
+
+1. **Install fhEVM Browser Extension**: Download from [Zama's website](https://zama.ai/fhevm)
+2. **Switch to fhEVM Sepolia**: Use the network switcher in the app or manually add the network
+3. **Get Test Tokens**: Use the faucet in the app to get ConfidentialUSD tokens
+4. **Start Lending**: Deposit tokens and borrow against your collateral
+
+### Network Configuration
+
+The app automatically detects if you're on the wrong network and shows a banner with a "Switch Network" button. Make sure you're connected to fhEVM Sepolia (Chain ID: 11155111).
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md).
 

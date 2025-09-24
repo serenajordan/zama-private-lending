@@ -1,12 +1,12 @@
-import { getToken } from "@/lib/contracts";
+import { getTokenContract } from "@/lib/contracts";
 
 let _decimals: number | null = null;
 
 export async function getTokenDecimals(): Promise<number> {
   if (_decimals !== null) return _decimals;
-  const t = await getToken();
+  const t = getTokenContract();
   try {
-    const d = Number(await t.decimals?.());
+    const d = Number(await t.read.decimals());
     _decimals = Number.isFinite(d) ? d : 18;
   } catch {
     _decimals = 18; // fallback

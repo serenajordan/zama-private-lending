@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Wallet } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { env } from "@/lib/env"
 import { useState } from "react"
 
@@ -23,14 +24,7 @@ export default function AppHeader() {
         </div>
 
         <div className="flex items-center space-x-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-2xl border-white/20 bg-white/10 backdrop-blur-sm hover:bg-white/20 dark:border-gray-700/50 dark:bg-gray-800/50 dark:hover:bg-gray-700/50"
-          >
-            <Wallet className="mr-2 h-4 w-4" />
-            Connect Wallet
-          </Button>
+          <ConnectButton />
 
           <Button
             variant="ghost"
@@ -43,9 +37,6 @@ export default function AppHeader() {
             <span className="inline-block h-4 w-4 rounded-full bg-gray-800 dark:bg-gray-100" />
           </Button>
 
-          {(env.demo) && (
-            <Badge variant="secondary" className="rounded-xl">Demo mode</Badge>
-          )}
         </div>
       </div>
     </header>

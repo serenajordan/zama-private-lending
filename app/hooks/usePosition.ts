@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { getPool, getToken } from '@/lib/contracts';
+import { getPoolContract, getTokenContract } from '@/lib/contracts';
+import type { Address } from 'viem';
 import { getTokenDecimals } from '@/lib/tokenMeta';
 import { fromUnits } from '@/lib/amount';
 import { useAccount } from 'wagmi';
@@ -26,15 +27,17 @@ export function usePosition() {
     if (!address || !tokenAddress || !poolAddress) return;
     setLoading(true);
     try {
-      const token = await getToken();
-      const pool = await getPool();
+      const token = getTokenContract();
+      const pool = getPoolContract();
       const decimals = await getTokenDecimals();
 
       // Read user's token balance
-      const rawBalance = await token.balanceOf(address);
+      const rawBalance = (await token.read.balanceOf([address as Address])) as unknown as bigint;
       
       // Read user's position from pool (returns [deposits, debt])
-      const [rawDeposits, rawDebt] = await pool.viewMyPosition();
+      const result = await pool.read.viewMyPosition([]);
+      const rawDeposits = (Array.isArray(result) ? result[0] : (result as any)[0]) as bigint;
+      const rawDebt = (Array.isArray(result) ? result[1] : (result as any)[1]) as bigint;
 
       // Convert to strings in human units
       const balance = fromUnits(rawBalance, decimals);
