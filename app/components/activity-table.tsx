@@ -240,7 +240,9 @@ export function ActivityTable() {
                         {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{formatTimestamp(transaction.timestamp)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <span suppressHydrationWarning>{formatTimestamp(transaction.timestamp)}</span>
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm">

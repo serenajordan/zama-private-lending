@@ -4,20 +4,24 @@ import { toast } from 'sonner';
 import { getToken, getPool } from '@/lib/contracts';
 import { getTokenDecimals } from '@/lib/tokenMeta';
 import { toU64Units, fromUnits } from '@/lib/amount';
-import { encryptU64, relayerHealthy } from '@/lib/relayer';
-import { useAccount } from 'wagmi';
+import { encryptU64, relayerHealthy, analytics, RELAYER_BASE } from '@/lib/relayer';
+import { useAccount, useChainId } from 'wagmi';
 
 export function useActions() {
   const { address } = useAccount();
   const [busy, setBusy] = useState<string | null>(null);
+  const chainId = useChainId();
 
   const withBusy = async <T,>(label: string, fn: () => Promise<T>) => {
     setBusy(label);
     try { 
       return await fn(); 
     } catch (error) {
-      console.error(`Error in ${label}:`, error);
-      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Include relayer attempted URLs if present
+      const tried = (error as any)?.tried as { url: string; status?: number }[] | undefined;
+      const detail = tried?.map(t => `${t.url} -> ${t.status ?? 'ERR'}`).join(', ');
+      console.error(`Error in ${label}:`, error, detail ? { tried } : undefined);
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}` + (detail ? ` (${detail})` : ''));
       throw error;
     } finally { 
       setBusy(null); 
@@ -28,11 +32,18 @@ export function useActions() {
     return withBusy('faucet', async () => {
       if (!address) throw new Error('Connect wallet');
       
-      // Ensure relayer is available before proceeding
-      const isHealthy = await relayerHealthy();
-      if (!isHealthy) {
-        throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
+      // Demo mode short-circuit
+      if (process.env.NEXT_PUBLIC_DEMO === '1') {
+        toast.success('Demo mode: faucet simulated');
+        return;
       }
+      const isHealthy = await relayerHealthy();
+      if (!isHealthy) throw new Error('Relayer offline');
+      // Dev analytics/logging
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[action] faucet', { chainId, account: address, RELAYER_BASE });
+      }
+      analytics({ event: 'faucet_click', chainId, account: address });
 
       const token = await getToken();
       const decimals = await getTokenDecimals();
@@ -65,12 +76,17 @@ export function useActions() {
     return withBusy('deposit', async () => {
       if (!address) throw new Error('Connect wallet');
       
-      // Ensure relayer is available before proceeding
-      const isHealthy = await relayerHealthy();
-      if (!isHealthy) {
-        throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
+      if (process.env.NEXT_PUBLIC_DEMO === '1') {
+        toast.success('Demo mode: deposit simulated');
+        return;
       }
-      
+      const isHealthy = await relayerHealthy();
+      if (!isHealthy) throw new Error('Relayer offline');
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[action] deposit', { chainId, account: address, RELAYER_BASE });
+      }
+      analytics({ event: 'deposit_click', chainId, account: address });
+
       const pool = await getPool();
       const token = await getToken();
       const decimals = await getTokenDecimals();
@@ -115,12 +131,17 @@ export function useActions() {
     return withBusy('borrow', async () => {
       if (!address) throw new Error('Connect wallet');
       
-      // Ensure relayer is available before proceeding
-      const isHealthy = await relayerHealthy();
-      if (!isHealthy) {
-        throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
+      if (process.env.NEXT_PUBLIC_DEMO === '1') {
+        toast.success('Demo mode: borrow simulated');
+        return;
       }
-      
+      const isHealthy = await relayerHealthy();
+      if (!isHealthy) throw new Error('Relayer offline');
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[action] borrow', { chainId, account: address, RELAYER_BASE });
+      }
+      analytics({ event: 'borrow_click', chainId, account: address });
+
       const pool = await getPool();
       const decimals = await getTokenDecimals();
       const u64 = toU64Units(humanAmount, decimals);
@@ -170,12 +191,17 @@ export function useActions() {
     return withBusy('repay', async () => {
       if (!address) throw new Error('Connect wallet');
       
-      // Ensure relayer is available before proceeding
-      const isHealthy = await relayerHealthy();
-      if (!isHealthy) {
-        throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
+      if (process.env.NEXT_PUBLIC_DEMO === '1') {
+        toast.success('Demo mode: repay simulated');
+        return;
       }
-      
+      const isHealthy = await relayerHealthy();
+      if (!isHealthy) throw new Error('Relayer offline');
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[action] repay', { chainId, account: address, RELAYER_BASE });
+      }
+      analytics({ event: 'repay_click', chainId, account: address });
+
       const pool = await getPool();
       const token = await getToken();
       const decimals = await getTokenDecimals();

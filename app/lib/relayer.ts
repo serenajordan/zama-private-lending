@@ -1,48 +1,108 @@
 // app/lib/relayer.ts
-// Client-only helpers for the FHE relayer
-// Temporary implementation to avoid SDK issues
+// Centralized relayer access with route fallbacks and verbose logging in dev
+
+export const RELAYER_BASE: string | undefined = '/api/relayer';
+
+type Json = Record<string, unknown> | unknown[] | string | number | boolean | null;
+
+function join(base: string, path: string) {
+  if (!base.endsWith('/') && !path.startsWith('/')) return `${base}/${path}`;
+  if (base.endsWith('/') && path.startsWith('/')) return `${base}${path.slice(1)}`;
+  return `${base}${path}`;
+}
+
+async function requestWithFallbacks(paths: string[], init: RequestInit & { base?: string } = {}) {
+  const base = init.base ?? (RELAYER_BASE as string);
+  const tried: { url: string; status?: number; error?: unknown }[] = [];
+  if (!base) throw new Error('[relayer] Missing proxy base');
+
+  for (const p of paths) {
+    const url = join(base, p);
+    try {
+      const res = await fetch(url, {
+        ...init,
+        headers: {
+          'content-type': 'application/json',
+          ...(init.headers as Record<string, string>),
+        },
+      });
+      tried.push({ url, status: res.status });
+      if (res.ok) {
+        let data: any = null;
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) data = await res.json();
+        else data = await res.text().catch(() => null);
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('[relayer] OK', init.method || 'GET', url, res.status);
+        }
+        return { url, status: res.status, data };
+      }
+    } catch (error) {
+      tried.push({ url, error });
+    }
+  }
+  const detail = tried.map(t => `${t.url} -> ${t.status ?? 'ERR'}`).join(', ');
+  const err = new Error(`[relayer] All routes failed: ${detail}`);
+  (err as any).tried = tried;
+  throw err;
+}
+
+export async function health() {
+  return requestWithFallbacks(['/health', '/status'], { method: 'GET' });
+}
+
+export async function publish(payload: Json) {
+  return requestWithFallbacks(['/relay', '/publish', '/v0/relay'], {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function reencrypt(params: Json) {
+  return requestWithFallbacks(['/reencrypt', '/re-encrypt', '/v0/reencrypt'], {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function peek(params: Json) {
+  return requestWithFallbacks(['/peek', '/v0/peek'], {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function analytics(event: Json) {
+  try {
+    return await requestWithFallbacks(['/analytics', '/v0/analytics'], {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  } catch {
+    // best-effort, ignore
+  }
+}
 
 export async function relayerHealthy(): Promise<boolean> {
-  if (typeof window === 'undefined') return false
-  
   try {
-    // For now, we'll assume the relayer is healthy if we can reach the base URL
-    // This avoids CORS issues with the /keys endpoint
-    const relayerBase = process.env.NEXT_PUBLIC_RELAYER_BASE || 'https://relayer.testnet.zama.cloud'
-    
-    // Use a simple connectivity test that doesn't trigger CORS
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
-    
-    try {
-      // Try to fetch the root endpoint with no-cors mode to avoid CORS issues
-      const response = await fetch(relayerBase, {
-        method: 'HEAD', // HEAD request is lighter
-        mode: 'no-cors', // This bypasses CORS but we can't read the response
-        signal: controller.signal,
-      })
-      
-      clearTimeout(timeoutId)
-      console.log('[relayer] health: ok (connectivity test passed)')
-      return true
-    } catch (fetchError) {
-      clearTimeout(timeoutId)
-      
-      // If no-cors fails, try a different approach - just assume it's healthy
-      // since the main issue is CORS, not actual connectivity
-      console.log('[relayer] health: ok (assuming healthy due to CORS limitations)')
-      return true
+    const res = await health();
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[relayer] health', { base: RELAYER_BASE, url: res.url, status: res.status, data: res.data });
     }
-  } catch (e) {
-    console.error('[relayer] health check failed:', e)
-    return false
+    return true;
+  } catch (e: any) {
+    console.warn('[relayer] health failed', e?.message ?? e);
+    return false;
   }
 }
 
 export async function encryptU64(value: bigint) {
-  // For now, return the raw value as a string
-  // The contract expects a uint64, so we'll pass the value directly
-  // TODO: Implement proper FHE encryption once SDK issues are resolved
-  console.log('[relayer] encryptU64 called with value:', value.toString())
-  return value.toString()
+  // Placeholder until full SDK wiring; keep API surface
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[relayer] encryptU64 (passthrough)', value.toString());
+  }
+  return value.toString();
 }
+
+// Expose internals for other modules that may need fallbacks
+export const _relayerInternals = { requestWithFallbacks, join };

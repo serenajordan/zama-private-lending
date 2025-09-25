@@ -10,7 +10,7 @@ import { ActionsPanel } from "@/components/actions-panel"
 import { ActivityTable } from "@/components/activity-table"
 import { useAccount } from "wagmi"
 import { usePosition } from "@/hooks/usePosition"
-import { relayerHealthy } from "@/lib/relayer"
+import { relayerHealthy, RELAYER_BASE, health } from "@/lib/relayer"
 import { useEffect } from "react"
 
 function KPICard({
@@ -174,8 +174,16 @@ export function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      console.log("[relayer] checking health...");
-      
+      console.log("[relayer] checking health...", { base: RELAYER_BASE });
+      try {
+        const res = await health();
+        if (!cancelled) {
+          console.info("[relayer] health ok", { base: RELAYER_BASE, url: res.url, status: res.status, data: res.data });
+        }
+      } catch (e: any) {
+        const tried = e?.tried as { url: string; status?: number }[] | undefined;
+        console.warn("[relayer] health failed", e?.message ?? e, tried ? { tried } : undefined);
+      }
       const ok = await relayerHealthy();
       if (!cancelled) {
         console.log("[relayer] health check result:", ok ? "✅ healthy" : "❌ unhealthy");
