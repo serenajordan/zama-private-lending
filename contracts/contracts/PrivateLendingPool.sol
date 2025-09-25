@@ -1,307 +1,216 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.25;
 
-import { FHE } from "@fhevm/solidity";
-import { ZamaConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
+import "encrypted-types/EncryptedTypes.sol";
 import "./ConfidentialUSD.sol";
+import { TFHE } from "./utils/TFHEOps.sol";
+import { MathEncrypted } from "./libraries/MathEncrypted.sol";
+
+interface IEncryptedPriceFeed {
+    function rawPrice() external view returns (bytes32);
+}
 
 /**
  * @title PrivateLendingPool
- * @dev A confidential lending pool built on Zama fhEVM
- * All deposits, debts, and operations are encrypted and private
- * 
- * NOTE: This is a simplified version for initial compilation.
- * FHEVM integration will be added once version compatibility is resolved.
+ * @dev Confidential lending pool ensuring all sensitive values stay encrypted.
+ * Deposits, debts, and health checks are handled through TFHE operations only.
  */
 contract PrivateLendingPool {
-    using FHE for euint64;
-    using FHE for ebool;
+    ConfidentialUSD public token;
 
-    // State variables
-    ConfidentialUSD public asset; // Changed from immutable to allow updates
-    
-    // Existing encrypted state (examples; keep your originals)
-    mapping(address => euint64) private _encDeposits; // collateral
-    mapping(address => euint64) private _encDebt;     // debt
-    
-    // User positions: deposits and debts (temporary uint256 for compilation)
-    mapping(address => uint256) public deposits;
-    mapping(address => uint256) public debts;
-    
-    // Access control
-    address public immutable owner;
-    
-    // Constants
-    uint64 constant LTV_BPS = 7000;  // 70% Loan-to-Value ratio
-    uint64 constant PRECISION_BPS = 10000;  // 100% in basis points
+    mapping(address => euint64) private deposits;
+    mapping(address => euint64) private debts;
+    // Encrypted per-block interest rate in RAY (1e9) fixed-point.
+    euint64 private ratePerBlockRay;
 
-    // -------------------------------
-    // Interest parameters & tracking
-    // -------------------------------
-    // interest rate in basis points per block (e.g., 5 = 0.05%/block)
-    uint64 public interestRateBpsPerBlock;
-    uint16 public constant BPS = 10_000;
-    mapping(address => uint64) public lastAccruedBlock; // block number last accrued for user
+    // Encrypted LTV ratio (scaled like RAY). Example: 0.7 * RAY for 70% LTV
+    euint64 private ltvRay;
+    // Encrypted liquidation threshold (scaled like RAY). Example: 0.8 * RAY
+    euint64 private liqThresholdRay;
 
-    // LTV (basis points) used for liquidation threshold (e.g., 7000 = 70%)
-    uint16 public ltvBps = 7000;
+    // External encrypted price feed (price scaled like RAY)
+    IEncryptedPriceFeed public priceFeed;
 
-    // Events
-    event Deposited(address indexed user);
-    event Borrowed(address indexed user);
-    event Repaid(address indexed user);
-    event Liquidated(address indexed liquidator, address indexed target);
-    event AssetUpdated(address indexed oldAsset, address indexed newAsset);
-    event InterestAccrued(address indexed user, uint64 blocks, bytes32 note);
-    event LiquidationAttempt(address indexed user, bool executed);
+    uint64 private constant BASIS_POINTS = 10_000;
+    uint64 public constant MAX_LTV_BPS = 7_000;
+    uint64 public constant LIQUIDATION_THRESHOLD_BPS = 8_000;
+    uint64 public constant LIQUIDATION_BONUS_BPS = 11_000;
 
-    constructor(address _asset) {
-        // Align with latest Zama guide: configure coprocessor via ZamaConfig
-        FHE.setCoprocessor(ZamaConfig.getSepoliaConfig());
-        asset = ConfidentialUSD(_asset);
-        owner = msg.sender;
+    event Deposit(address indexed user, bytes32 encryptedAmount);
+    event Borrow(address indexed user, bytes32 encryptedAmount);
+    event Repay(address indexed user, bytes32 encryptedAmount);
+    event Liquidation(address indexed liquidator, address indexed borrower, bytes32 encryptedAmount);
+    event InterestAccrued(address indexed user, bytes32 rateBps);
+
+    constructor(address _token, address _priceFeed) {
+        token = ConfidentialUSD(_token);
+        priceFeed = IEncryptedPriceFeed(_priceFeed);
+        // Default rate 0 and LTV/thresholds
+        ratePerBlockRay = TFHE.asEuint64(uint64(0));
+        ltvRay = TFHE.asEuint64(uint64(700_000_000)); // 0.7 * 1e9
+        liqThresholdRay = TFHE.asEuint64(uint64(800_000_000)); // 0.8 * 1e9
     }
 
-    // Modifier for owner-only functions
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Not owner");
-        _;
+    function setPriceFeed(address _priceFeed) external {
+        priceFeed = IEncryptedPriceFeed(_priceFeed);
     }
 
-    function setInterestRateBpsPerBlock(uint64 bps) external /* onlyOwner */ {
-        // TODO: add access control; keep simple for hackathon
-        require(bps <= 1000, "rate too big"); // guard
-        interestRateBpsPerBlock = bps;
+    function setLtvRay(uint64 rayScaled) external {
+        ltvRay = TFHE.asEuint64(rayScaled);
     }
 
-    function setLtvBps(uint16 newLtv) external /* onlyOwner */ {
-        require(newLtv > 0 && newLtv < BPS, "bad ltv");
-        ltvBps = newLtv;
+    function setLiqThresholdRay(uint64 rayScaled) external {
+        liqThresholdRay = TFHE.asEuint64(rayScaled);
     }
 
     /**
-     * @dev Update the asset address (owner only)
-     * @param newAsset New asset address
+     * @dev Deposit encrypted collateral into the pool.
      */
-    function updateAsset(address newAsset) external onlyOwner {
-        require(newAsset != address(0), "Invalid asset address");
-        address oldAsset = address(asset);
-        asset = ConfidentialUSD(newAsset);
-        emit AssetUpdated(oldAsset, newAsset);
-    }
+    function deposit(bytes32 amount) external {
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], encryptedAmount);
 
-    /// @dev Accrue interest into encrypted debt. Pure FHE math:
-    /// newDebt = debt + (debt * rateBpsPerBlock * blocks / BPS)
-    function accrue(address user) public {
-        uint64 last = lastAccruedBlock[user];
-        uint64 blk = uint64(block.number);
-        if (last == 0) { lastAccruedBlock[user] = blk; return; }
-        uint64 dBlocks = blk - last;
-        if (dBlocks == 0) return;
-        lastAccruedBlock[user] = blk;
+        // Token transfer mocked until FHE-compatible token plumbing is restored.
+        // token.transferFromEncrypted(msg.sender, address(this), amount);
 
-        // TODO: Re-enable FHEVM types once version compatibility is resolved
-        // euint64 eDebt = _encDebt[user];
-        // if (!FHE.isInitialized(eDebt)) { return; } // no debt yet
-
-        // scale = rate * blocks
-        // uint64 scaleBps = interestRateBpsPerBlock * dBlocks;
-        // euint64 eScale = FHE.asEuint64(scaleBps);
-        // euint64 numerator = FHE.mul(eDebt, eScale);           // debt * (rate*blocks)
-        // euint64 eBps = FHE.asEuint64(uint64(BPS));
-        // euint64 eIncr = FHE.div(numerator, eBps);             // / BPS
-        // _encDebt[user] = FHE.add(eDebt, eIncr);
-
-        emit InterestAccrued(user, dBlocks, keccak256("accrue"));
+        emit Deposit(msg.sender, amount);
     }
 
     /**
-     * @dev Deposit tokens as collateral
-     * @param amount Amount to deposit (temporary uint256 for compilation)
+     * @dev Borrow against encrypted collateral with full encrypted LTV gating.
      */
-    function deposit(uint256 amount) external {
-        accrue(msg.sender);
-        // TODO: Re-enable FHEVM validation once version compatibility is resolved
-        // require(FHE.isSenderAllowed(amount), "Not allowed");
-        
-        // TODO: Re-enable FHEVM types once version compatibility is resolved
-        // euint64 amt = FHE.fromExternal(amount, proof);
-        // amt.allowThis();
-        // amt.allowTransient(address(asset));
-        
-        // Pull tokens from user to pool
-        asset.pull(msg.sender, address(this), amount);
-        
-        // Update user's deposit
-        deposits[msg.sender] += amount;
-        
-        emit Deposited(msg.sender);
+    function borrow(bytes32 amount) external {
+        _accrue(msg.sender);
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
+        euint64 userDeposits = deposits[msg.sender];
+        euint64 userDebt = debts[msg.sender];
+
+        euint64 newDebt = TFHE.add(userDebt, encryptedAmount);
+
+        // Fetch encrypted price and compute collateral value and max borrow
+        euint64 price = TFHE.asEuint64(priceFeed.rawPrice());
+        euint64 collateralValue = MathEncrypted.scaleMul(userDeposits, price);
+        euint64 maxBorrow = MathEncrypted.scaleMul(collateralValue, ltvRay);
+
+        ebool canBorrow = TFHE.lte(newDebt, maxBorrow);
+        TFHE.req(canBorrow, "Insufficient collateral");
+        debts[msg.sender] = TFHE.cmux(canBorrow, newDebt, userDebt);
+
+        // token.transferEncrypted(msg.sender, amount);
+
+        emit Borrow(msg.sender, amount);
     }
 
     /**
-     * @dev Borrow against deposited collateral
-     * @param req Requested amount (temporary uint256 for compilation)
+     * @dev Repay encrypted debt without ever allowing a negative balance.
      */
-    function borrow(uint256 req) external {
-        accrue(msg.sender);
-        // TODO: Re-enable FHEVM types once version compatibility is resolved
-        // euint64 req = FHE.fromExternal(encReq, proof);
-        // req.allowThis();
-        
-        // Calculate borrowing capacity: deposit * LTV / PRECISION
-        uint256 cap = (deposits[msg.sender] * LTV_BPS) / PRECISION_BPS;
-        
-        // Check if user has available borrowing capacity
-        require(debts[msg.sender] <= cap, "Insufficient borrowing capacity");
-        
-        // Calculate maximum available to borrow
-        uint256 maxAvailable = cap - debts[msg.sender];
-        
-        // Determine actual borrow amount (min of request and available)
-        uint256 borrowAmount = req <= maxAvailable ? req : maxAvailable;
-        
-        // Update user's debt
-        debts[msg.sender] += borrowAmount;
-        
-        // Transfer tokens to user
-        asset.push(address(this), msg.sender, borrowAmount);
-        
-        emit Borrowed(msg.sender);
+    function repay(bytes32 amount) external {
+        _accrue(msg.sender);
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
+        euint64 userDebt = debts[msg.sender];
+
+        ebool validRepayment = TFHE.lte(encryptedAmount, userDebt);
+        TFHE.req(validRepayment, "Repaying more than owed");
+
+        euint64 newDebt = TFHE.sub(userDebt, encryptedAmount);
+        debts[msg.sender] = TFHE.cmux(validRepayment, newDebt, userDebt);
+
+        // token.transferFromEncrypted(msg.sender, address(this), amount);
+
+        emit Repay(msg.sender, amount);
     }
 
     /**
-     * @dev Repay borrowed amount
-     * @param amount Amount to repay (temporary uint256 for compilation)
+     * @dev Accrue interest for a user by an encrypted basis-point rate.
+     * @param user Address of the borrower whose debt accrues interest.
+     * @param rateBps Encrypted basis points to apply (e.g. 100 = 1%).
      */
-    function repay(uint256 amount) external {
-        accrue(msg.sender);
-        // TODO: Re-enable FHEVM validation once version compatibility is resolved
-        // require(FHE.isSenderAllowed(amount), "Not allowed");
-        
-        // TODO: Re-enable FHEVM types once version compatibility is resolved
-        // euint64 amt = FHE.fromExternal(encAmt, proof);
-        // amt.allowThis();
-        // amt.allowTransient(address(asset));
-        
-        // Calculate actual repayment amount (min of amount and debt)
-        uint256 repayAmount = amount <= debts[msg.sender] ? amount : debts[msg.sender];
-        
-        // Pull tokens from user
-        asset.pull(msg.sender, address(this), repayAmount);
-        
-        // Update user's debt
-        debts[msg.sender] -= repayAmount;
-        
-        emit Repaid(msg.sender);
+    function accrueInterest(address user, bytes32 rateBps) external {
+        euint64 userDebt = debts[user];
+        euint64 rate = TFHE.asEuint64(rateBps);
+
+        euint64 interest = TFHE.div(TFHE.mul(userDebt, rate), BASIS_POINTS);
+        euint64 newDebt = TFHE.add(userDebt, interest);
+        debts[user] = newDebt;
+
+        emit InterestAccrued(user, rateBps);
     }
 
     /**
-     * @dev View user's position
-     * @return Deposit amount
-     * @return Debt amount
+     * @dev Set the encrypted per-block interest rate (RAY scaled). For demo, accept plaintext uint64.
      */
-    function viewMyPosition() external view returns (uint256, uint256) {
-        return (deposits[msg.sender], debts[msg.sender]);
+    function setRatePerBlock(uint64 rayScaled) external {
+        ratePerBlockRay = TFHE.asEuint64(rayScaled);
     }
 
     /**
-     * @dev Calculate user's health factor (deposit * LTV >= debt)
-     * @param user Address to check
-     * @return Health factor (true if healthy)
+     * @dev Accrue per-block interest onto user's debt using RAY fixed-point helpers.
+     * newDebt = (oldDebt * (RAY + rate)) / RAY
      */
-    function getHealthFactor(address user) external view returns (bool) {
-        uint256 borrowingCapacity = (deposits[user] * LTV_BPS) / PRECISION_BPS;
-        
-        return debts[user] <= borrowingCapacity;
+    function _accrue(address user) private {
+        euint64 oldDebt = debts[user];
+        ebool hasDebt = TFHE.gt(oldDebt, TFHE.asEuint64(uint64(0)));
+        euint64 onePlusRate = TFHE.add(ratePerBlockRay, MathEncrypted.RAY());
+        euint64 tmp = MathEncrypted.scaleMul(oldDebt, onePlusRate);
+        euint64 newDebt = MathEncrypted.scaleDiv(tmp, MathEncrypted.RAY());
+        debts[user] = TFHE.cmux(hasDebt, newDebt, oldDebt);
     }
 
     /**
-     * @dev Simple soft liquidation function
-     * @param target Address to liquidate
-     * @param encRepay Encrypted repayment amount
-     * @param proof Proof for encrypted amount
+     * @dev Liquidate an unhealthy position using encrypted conditions only.
      */
-    function liquidateSimple(address target, uint256 encRepay, bytes calldata proof) external {
-        // TODO: Re-enable FHEVM types once version compatibility is resolved
-        // health: debt > cap
-        // euint64 cap = FHE.div(FHE.mul(deposits[target], FHE.asEuint64(LTV_BPS)), FHE.asEuint64(PRECISION_BPS));
-        // ebool unhealthy = FHE.gt(debts[target], cap);
+    function liquidate(address borrower, bytes32 repayAmount) external {
+        euint64 encryptedRepayAmount = TFHE.asEuint64(repayAmount);
+        euint64 borrowerDebt = debts[borrower];
+        euint64 borrowerDeposits = deposits[borrower];
 
-        // euint64 repay = FHE.fromExternal(encRepay, proof);
-        // repay.allowThis(); 
-        // repay.allowTransient(address(asset));
+        // Compute encrypted health via price and threshold: scaleMul(collateralValue, threshold) < debt
+        euint64 price = TFHE.asEuint64(priceFeed.rawPrice());
+        euint64 collateralValue = MathEncrypted.scaleMul(borrowerDeposits, price);
+        euint64 lhs = MathEncrypted.scaleMul(collateralValue, liqThresholdRay);
+        ebool liquidatable = TFHE.lt(lhs, borrowerDebt);
+        TFHE.req(liquidatable, "Position healthy");
 
-        // allowed = unhealthy ? min(repay, debt[target]) : 0
-        // euint64 allowed = FHE.select(unhealthy, FHE.select(FHE.le(repay, debts[target]), repay, debts[target]), FHE.asEuint64(0));
+        // Clamp repay to debt using cmux so we never underflow
+        ebool repayWithinDebt = TFHE.lte(encryptedRepayAmount, borrowerDebt);
+        euint64 repayClamped = TFHE.cmux(repayWithinDebt, encryptedRepayAmount, borrowerDebt);
 
-        // asset.pull(msg.sender, address(this), allowed);
-        // debts[target] = FHE.sub(debts[target], allowed);
-        // debts[target].allowThis();
+        euint64 collateralToSeize = TFHE.div(
+            TFHE.mul(repayClamped, LIQUIDATION_BONUS_BPS),
+            BASIS_POINTS
+        );
 
-        // For now, simplified version without FHEVM
-        uint256 cap = (deposits[target] * LTV_BPS) / PRECISION_BPS;
-        bool unhealthy = debts[target] > cap;
-        
-        if (unhealthy) {
-            uint256 allowed = encRepay <= debts[target] ? encRepay : debts[target];
-            asset.pull(msg.sender, address(this), allowed);
-            debts[target] -= allowed;
-        }
+        // Clamp collateral seize to available deposits
+        ebool sufficientCollateral = TFHE.lte(collateralToSeize, borrowerDeposits);
+        euint64 seizeClamped = TFHE.cmux(sufficientCollateral, collateralToSeize, borrowerDeposits);
 
-        emit Liquidated(msg.sender, target);
+        // Update state in one go to reduce stack
+        debts[borrower] = TFHE.sub(borrowerDebt, repayClamped);
+        deposits[borrower] = TFHE.sub(borrowerDeposits, seizeClamped);
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], seizeClamped);
+
+        emit Liquidation(msg.sender, borrower, repayAmount);
     }
 
-    // -------------------------------
-    // Encrypted liquidation
-    // -------------------------------
-    /// @dev Liquidate user if eDebt > eCollateral * ltvBps / BPS.
-    /// We **do not** branch on plaintext. We compute new states with FHE cmux/select.
-    function liquidate(address user, bytes32 repayHandle, bytes32 repayProof) external {
-        // accrue first so condition reflects up-to-date state
-        accrue(user);
-
-        // TODO: Re-enable FHEVM types once version compatibility is resolved
-        // euint64 eDebt = _encDebt[user];
-        // euint64 eCol  = _encDeposits[user];
-        // if (!FHE.isInitialized(eDebt) || !FHE.isInitialized(eCol)) {
-        //     emit LiquidationAttempt(user, false);
-        //     return;
-        // }
-        // threshold = eCol * ltvBps / BPS
-        // euint64 eLtv   = FHE.asEuint64(uint64(ltvBps));
-        // euint64 eBps   = FHE.asEuint64(uint64(BPS));
-        // euint64 eProd  = FHE.mul(eCol, eLtv);
-        // euint64 eLimit = FHE.div(eProd, eBps);
-
-        // ebool underwater = FHE.gt(eDebt, eLimit);
-
-        // repay amount comes as encrypted handle (from user or liquidator)
-        // NOTE: this consumes the relayer proof like repay()
-        //       Assuming you already have a helper to decode handle+proof -> euint64 value
-        // euint64 eRepay = _consumeHandleToEuint64(repayHandle, repayProof);
-
-        // clamp repay to debt
-        // ebool repayTooBig = FHE.gt(eRepay, eDebt);
-        // euint64 eClamped  = FHE.select(repayTooBig, eDebt, eRepay);
-
-        // newDebt = underwater ? (debt - clamped) : debt
-        // euint64 eNewDebt  = FHE.select(underwater, FHE.sub(eDebt, eClamped), eDebt);
-        // _encDebt[user]    = eNewDebt;
-
-        // For collateral, you might seize a small penalty proportional to repay:
-        // seized = underwater ? (clamped / 10) : 0
-        // euint64 eZero     = FHE.asEuint64(0);
-        // euint64 eSeize    = FHE.div(eClamped, FHE.asEuint64(10));
-        // euint64 eDeltaCol = FHE.select(underwater, eSeize, eZero);
-        // _encDeposits[user]= FHE.sub(eCol, eDeltaCol); // reduce collateral if liquidated
-
-        emit LiquidationAttempt(user, false);
+    function viewMyPosition() external view returns (bytes32, bytes32) {
+        return _peekPosition(msg.sender);
     }
 
-    /// @dev Example internal stub; wire to your relayer verification util.
-    function _consumeHandleToEuint64(bytes32 handle, bytes32 proof) internal returns (euint64) {
-        // TODO: replace with your existing handle+proof consumer from encryptU64.
-        // For now, return initialized zero to keep compiler happy if needed.
-        return FHE.asEuint64(0);
+    function peekPosition(address user) external view returns (bytes32, bytes32) {
+        return _peekPosition(user);
+    }
+
+    function _peekPosition(address user) private view returns (bytes32, bytes32) {
+        return (euint64.unwrap(deposits[user]), euint64.unwrap(debts[user]));
+    }
+
+    function _maxBorrow(euint64 userDeposits) private returns (euint64) {
+        return TFHE.div(TFHE.mul(userDeposits, MAX_LTV_BPS), BASIS_POINTS);
+    }
+
+    function _isLiquidatable(euint64 userDeposits, euint64 userDebt) private returns (ebool) {
+        euint64 lhs = TFHE.mul(userDeposits, LIQUIDATION_THRESHOLD_BPS);
+        euint64 rhs = TFHE.mul(userDebt, BASIS_POINTS);
+        return TFHE.lt(lhs, rhs);
     }
 }

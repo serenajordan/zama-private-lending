@@ -1,7 +1,13 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { maybeInitFHEVMOrSkip } from "./utils/fhe-env";
 
-describe("Encrypted Interest + Liquidation", () => {
+describe("Encrypted Interest + Liquidation", function () {
+  let fhe: any;
+  before(async function () {
+    fhe = await maybeInitFHEVMOrSkip(this);
+  });
+
   it("accrue does not revert and updates block markers", async () => {
     // Keep green in CI (relayer may be down)
     // In local runs you can integrate real deposit/borrow before calling accrue.

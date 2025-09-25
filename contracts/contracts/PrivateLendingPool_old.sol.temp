@@ -1,0 +1,234 @@
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+pragma solidity ^0.8.25;
+
+import { ZamaConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
+import "./ConfidentialUSD.sol";
+import { TFHE } from "./utils/TFHEOps.sol";
+
+/**
+ * @title PrivateLendingPool
+ * @dev A confidential lending pool built on Zama fhEVM
+ * All deposits, debts, and operations are encrypted and private
+ * 
+ * NOTE: This is a simplified version for initial compilation.
+ * FHEVM integration will be added once version compatibility is resolved.
+ */
+contract PrivateLendingPool {
+
+    // State variables
+    ConfidentialUSD public token;
+    mapping(address => euint64) private deposits;
+    mapping(address => euint64) private debts;
+    
+    // Pool configuration
+    uint256 public constant LIQUIDATION_THRESHOLD = 8000; // 80% in basis points
+    uint256 public constant MAX_LTV = 7000; // 70% in basis points
+    
+    // Events
+    event Deposit(address indexed user, bytes32 encryptedAmount);
+    event Borrow(address indexed user, bytes32 encryptedAmount);
+    event Repay(address indexed user, bytes32 encryptedAmount);
+    event Liquidation(address indexed liquidator, address indexed borrower, bytes32 encryptedAmount);
+
+    constructor(address _token) {
+        token = ConfidentialUSD(_token);
+    }
+
+    /**
+     * @dev Deposit tokens as collateral
+     * @param amount Encrypted amount to deposit
+     */
+    function deposit(bytes32 amount) external {
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
+
+        // Add to user's deposits
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], encryptedAmount);
+        
+        // Transfer tokens from user to this contract
+        // Note: This requires the user to approve this contract first
+        token.transferFromEncrypted(msg.sender, address(this), amount);
+        
+        emit Deposit(msg.sender, amount);
+    }
+
+    /**
+     * @dev Borrow tokens against collateral
+     * @param amount Encrypted amount to borrow
+     */
+    function borrow(bytes32 amount) external {
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
+        euint64 userDeposits = deposits[msg.sender];
+        euint64 userDebts = debts[msg.sender];
+
+        // Calculate new debt
+        euint64 newDebt = TFHE.add(userDebts, encryptedAmount);
+
+        // Check LTV (this is simplified - in practice you'd need price oracles)
+        // For now, we assume 1:1 ratio and check that debt doesn't exceed 70% of deposits
+        euint64 maxBorrow =
+            TFHE.div(TFHE.mul(userDeposits, TFHE.asEuint64(uint256(MAX_LTV))), uint64(10000));
+
+        // Verify borrowing capacity (this would be done privately in real implementation)
+        ebool canBorrow = TFHE.lte(newDebt, maxBorrow);
+        TFHE.req(canBorrow, "Insufficient collateral");
+
+        // Update debt using encrypted conditional selection
+        debts[msg.sender] = TFHE.cmux(canBorrow, newDebt, maxBorrow);
+        
+        // Transfer tokens to user
+        token.transferEncrypted(msg.sender, amount);
+        
+        emit Borrow(msg.sender, amount);
+    }
+
+    /**
+     * @dev Repay borrowed tokens
+     * @param amount Encrypted amount to repay
+     */
+    function repay(bytes32 amount) external {
+        euint64 encryptedAmount = TFHE.asEuint64(amount);
+        euint64 userDebt = debts[msg.sender];
+
+        // Ensure not repaying more than owed
+        ebool validRepayment = TFHE.lte(encryptedAmount, userDebt);
+        TFHE.req(validRepayment, "Repaying more than owed");
+
+        // Update debt, preserving previous value if repayment is invalid
+        debts[msg.sender] = TFHE.cmux(validRepayment, TFHE.sub(userDebt, encryptedAmount), userDebt);
+        
+        // Transfer tokens from user to this contract
+        token.transferFromEncrypted(msg.sender, address(this), amount);
+        
+        emit Repay(msg.sender, amount);
+    }
+
+    /**
+     * @dev View user's position (deposits and debt)
+     * @return userDeposits Encrypted deposits
+     * @return userDebt Encrypted debt
+     */
+    function viewMyPosition() external view returns (uint64, uint64) {
+        // In a real implementation, this would return encrypted values
+        // For demo purposes, we decrypt for the user
+        euint64 userDeposits = deposits[msg.sender];
+        euint64 userDebt = debts[msg.sender];
+        
+        return (TFHE.decrypt(userDeposits), TFHE.decrypt(userDebt));
+    }
+
+    /**
+     * @dev Calculate health factor for a user
+     * @param user Address of the user
+     * @return healthFactor Health factor (scaled by 1e18)
+     */
+    function getHealthFactor(address user) external view returns (uint256) {
+        euint64 userDeposits = deposits[user];
+        euint64 userDebt = debts[user];
+        
+        uint64 depositsDecrypted = TFHE.decrypt(userDeposits);
+        uint64 debtDecrypted = TFHE.decrypt(userDebt);
+        
+        if (debtDecrypted == 0) {
+            return type(uint256).max; // No debt = infinite health
+        }
+        
+        // Health factor = (deposits * liquidation_threshold) / debt
+        return (depositsDecrypted * LIQUIDATION_THRESHOLD * 1e18) / (debtDecrypted * 10000);
+    }
+
+    /**
+     * @dev Check if a position can be liquidated
+     * @param user Address of the user
+     * @return canLiquidate True if position can be liquidated
+     */
+    function canLiquidate(address user) external view returns (bool) {
+        uint256 healthFactor = this.getHealthFactor(user);
+        return healthFactor < 1e18; // Health factor below 1.0
+    }
+
+    /**
+     * @dev Liquidate an undercollateralized position
+     * @param borrower Address of the borrower to liquidate
+     * @param repayAmount Encrypted amount to repay
+     */
+    function liquidate(address borrower, bytes32 repayAmount) external {
+        require(this.canLiquidate(borrower), "Position is healthy");
+        
+        euint64 encryptedRepayAmount = TFHE.asEuint64(repayAmount);
+        euint64 borrowerDebt = debts[borrower];
+        euint64 borrowerDeposits = deposits[borrower];
+
+        // Ensure not repaying more than the debt
+        ebool validLiquidation = TFHE.lte(encryptedRepayAmount, borrowerDebt);
+        TFHE.req(validLiquidation, "Repay amount exceeds debt");
+
+        // Calculate collateral to seize (with liquidation bonus)
+        // Simplified: 1:1 ratio + 10% bonus
+        euint64 collateralToSeize =
+            TFHE.div(TFHE.mul(encryptedRepayAmount, TFHE.asEuint64(uint256(110))), uint64(100));
+
+        // Ensure there's enough collateral
+        ebool sufficientCollateral = TFHE.lte(collateralToSeize, borrowerDeposits);
+        TFHE.req(sufficientCollateral, "Insufficient collateral");
+
+        // Update borrower's position with encrypted conditional guards
+        debts[borrower] =
+            TFHE.cmux(validLiquidation, TFHE.sub(borrowerDebt, encryptedRepayAmount), borrowerDebt);
+        deposits[borrower] =
+            TFHE.cmux(sufficientCollateral, TFHE.sub(borrowerDeposits, collateralToSeize), borrowerDeposits);
+
+        // Update liquidator's position
+        deposits[msg.sender] = TFHE.add(deposits[msg.sender], collateralToSeize);
+        
+        // Transfer repayment from liquidator to contract
+        token.transferFromEncrypted(msg.sender, address(this), repayAmount);
+        
+        emit Liquidation(msg.sender, borrower, repayAmount);
+    }
+
+    /**
+     * @dev Emergency pause function (simplified)
+     */
+    function pause() external {
+        // In production, this would have proper access control
+        // For now, it's a placeholder
+    }
+
+    /**
+     * @dev Get total pool statistics
+     * @return totalDeposits Total deposits in the pool
+     * @return totalBorrows Total borrows from the pool
+     */
+    function getPoolStats() external view returns (uint256, uint256) {
+        // This would aggregate all user positions
+        // Simplified implementation for demo
+        return (0, 0);
+    }
+
+    /**
+     * @dev Set liquidation threshold (governance function)
+     * @param newThreshold New liquidation threshold in basis points
+     */
+    function setLiquidationThreshold(uint256 newThreshold) external {
+        // In production, this would have proper governance controls
+        // require(msg.sender == governance, "Only governance");
+        // require(newThreshold > 5000 && newThreshold < 9500, "Invalid threshold");
+        // LIQUIDATION_THRESHOLD = newThreshold;
+    }
+
+    /**
+     * @dev Calculate interest (placeholder for future implementation)
+     */
+    function calculateInterest() external pure returns (uint256) {
+        // Placeholder for interest calculation
+        return 0;
+    }
+
+    /**
+     * @dev Apply interest to all positions (placeholder)
+     */
+    function applyInterest() external {
+        // Placeholder for interest application
+        // This would update all debt positions with accrued interest
+    }
+}

@@ -40,11 +40,9 @@ export async function relayerHealthy(): Promise<boolean> {
 }
 
 export async function encryptU64(value: bigint) {
-  // For now, return a mock encrypted input
-  // TODO: Implement proper encryption once SDK issues are resolved
+  // For now, return the raw value as a string
+  // The contract expects a uint64, so we'll pass the value directly
+  // TODO: Implement proper FHE encryption once SDK issues are resolved
   console.log('[relayer] encryptU64 called with value:', value.toString())
-  return {
-    handles: new Uint8Array(32),
-    inputProof: new Uint8Array(64)
-  }
+  return value.toString()
 }

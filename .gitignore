@@ -104,3 +104,8 @@ temp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+# secrets
+.env.*
+app/.env.local
+*.pem
+*.key

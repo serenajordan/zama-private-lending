@@ -1,10 +1,20 @@
-import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-toolbox";
 // import "@fhevm/hardhat-plugin";
 import "hardhat-gas-reporter";
 import "dotenv/config";
 
 export default {
-  solidity: "0.8.24",
+  solidity: {
+    version: "0.8.25",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      },
+      evmVersion: "paris",
+      viaIR: true
+    }
+  },
   gasReporter: { 
     enabled: true, 
     currency: "USD", 
