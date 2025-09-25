@@ -1,14 +1,112 @@
 'use client';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { getToken, getPool } from '@/lib/contracts';
+import { TOKEN_ADDR, POOL_ADDR } from '@/lib/contracts';
+import TokenABI from '@/abis/ConfidentialUSD.json';
+import PoolABI from '@/abis/PrivateLendingPool.json';
 import { getTokenDecimals } from '@/lib/tokenMeta';
-import { toU64Units } from '@/lib/amount';
-import { encryptU64, relayerHealthy } from '@/lib/relayer';
-import { useAccount } from 'wagmi';
+import { hasFn, expectsBytes, expectsUint } from '@/lib/abi-utils';
+import { useAccount, useWalletClient } from 'wagmi';
+import { parseUnits } from 'viem';
+
+const toUnits = (amountStr: string, decimals = 18) =>
+  parseUnits((amountStr || '0').trim(), decimals);
+
+// DEPOSIT: approve then pool.deposit(units)
+// expects: tokenAddress, poolAddress, tokenDecimals are available in scope (or fetched as in the file)
+async function handleDeposit({
+  walletClient,
+  tokenAddress,
+  poolAddress,
+  tokenDecimals,
+  amountStr,
+}: {
+  walletClient: any;
+  tokenAddress: `0x${string}`;
+  poolAddress: `0x${string}`;
+  tokenDecimals: number;
+  amountStr: string;
+}) {
+  const units = toUnits(amountStr, tokenDecimals);
+  console.debug('[deposit:uint]', { units: units.toString() });
+
+  // 1) approve
+  await walletClient.writeContract({
+    address: tokenAddress,
+    abi: (TokenABI as any).abi ?? (TokenABI as any),
+    functionName: 'approve',
+    args: [poolAddress, units],
+  });
+
+  // 2) deposit (NO { value })
+  return walletClient.writeContract({
+    address: poolAddress,
+    abi: (PoolABI as any).abi ?? (PoolABI as any),
+    functionName: 'deposit',
+    args: [units],
+  });
+}
+
+// BORROW: pool.borrow(units) with args only (NO { value })
+async function handleBorrow({
+  walletClient,
+  poolAddress,
+  tokenDecimals,
+  amountStr,
+}: {
+  walletClient: any;
+  poolAddress: `0x${string}`;
+  tokenDecimals: number;
+  amountStr: string;
+}) {
+  const units = toUnits(amountStr, tokenDecimals);
+  console.debug('[borrow:uint]', { units: units.toString() });
+
+  return walletClient.writeContract({
+    address: poolAddress,
+    abi: (PoolABI as any).abi ?? (PoolABI as any),
+    functionName: 'borrow',
+    args: [units],
+  });
+}
+
+// REPAY: approve then pool.repay(units) (NO { value })
+async function handleRepay({
+  walletClient,
+  tokenAddress,
+  poolAddress,
+  tokenDecimals,
+  amountStr,
+}: {
+  walletClient: any;
+  tokenAddress: `0x${string}`;
+  poolAddress: `0x${string}`;
+  tokenDecimals: number;
+  amountStr: string;
+}) {
+  const units = toUnits(amountStr, tokenDecimals);
+  console.debug('[repay:uint]', { units: units.toString() });
+
+  // 1) approve
+  await walletClient.writeContract({
+    address: tokenAddress,
+    abi: (TokenABI as any).abi ?? (TokenABI as any),
+    functionName: 'approve',
+    args: [poolAddress, units],
+  });
+
+  // 2) repay
+  return walletClient.writeContract({
+    address: poolAddress,
+    abi: (PoolABI as any).abi ?? (PoolABI as any),
+    functionName: 'repay',
+    args: [units],
+  });
+}
 
 export function useActions() {
   const { address } = useAccount();
+  const { data: walletClient } = useWalletClient();
   const [busy, setBusy] = useState<string | null>(null);
 
   const withBusy = async <T,>(label: string, fn: () => Promise<T>) => {
@@ -27,100 +125,100 @@ export function useActions() {
   const faucet = async (humanAmount: string) => {
     return withBusy('faucet', async () => {
       if (!address) throw new Error('Connect wallet');
+      if (!walletClient) throw new Error('Wallet not ready');
+
+      const tokenDecimals = await getTokenDecimals();
+      const units = toUnits(humanAmount, tokenDecimals);
+      const tokenAddress = TOKEN_ADDR as `0x${string}`;
+      const tokenAbi = (TokenABI as any).abi as any[];
+
+      // Prefer faucet(uint*) → else mint(address,uint*)
+      if (hasFn(tokenAbi, 'faucet') && expectsUint(tokenAbi, 'faucet', 0)) {
+        console.info('[faucet] using token.faucet(uint)', { type: 'uint', units: units.toString() });
+        const hash = await walletClient.writeContract({
+          address: tokenAddress,
+          abi: tokenAbi,
+          functionName: 'faucet',
+          args: [units],
+        });
+        toast.success('[faucet:uint] tx sent');
+        return hash;
+      }
       
-      // Ensure relayer is available before proceeding
-      const isHealthy = await relayerHealthy();
-      if (!isHealthy) {
-        throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
+      if (hasFn(tokenAbi, 'mint') && expectsUint(tokenAbi, 'mint', 1)) {
+        console.info('[faucet] using token.mint(address,uint)', { type: 'uint', to: address, units: units.toString() });
+        const hash = await walletClient.writeContract({
+          address: tokenAddress,
+          abi: tokenAbi,
+          functionName: 'mint',
+          args: [address, units],
+        });
+        toast.success('[faucet:mint:uint] tx sent');
+        return hash;
       }
 
-      const token = await getToken();
-      const decimals = await getTokenDecimals();
-      const u64 = toU64Units(humanAmount, decimals);
-      
-      // Encrypt the amount for the faucet call
-      const enc = await encryptU64(u64);
-      
-      // Call faucet function with encrypted amount
-      const tx = await token.faucet(enc);
-      toast.success('Faucet transaction sent');
-      await tx.wait();
-      toast.success('Faucet completed');
+      throw new Error('No supported faucet function found (uint or bytes)');
     });
   };
 
   const deposit = async (humanAmount: string) => {
     return withBusy('deposit', async () => {
       if (!address) throw new Error('Connect wallet');
-      
-      // Ensure relayer is available before proceeding
-      const isHealthy = await relayerHealthy();
-      if (!isHealthy) {
-        throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
-      }
-      
-      const pool = await getPool();
-      const decimals = await getTokenDecimals();
-      const u64 = toU64Units(humanAmount, decimals);
-      
-      // Encrypt the amount for the deposit call
-      const enc = await encryptU64(u64);
-      
-      // Call deposit function with encrypted amount
-      const tx = await pool.deposit(enc);
-      toast.success('Deposit submitted');
-      await tx.wait();
-      toast.success('Deposit confirmed');
+      if (!walletClient) throw new Error('Wallet not ready');
+
+      const tokenDecimals = await getTokenDecimals();
+      const tokenAddress = TOKEN_ADDR as `0x${string}`;
+      const poolAddress = POOL_ADDR as `0x${string}`;
+
+      const hash = await handleDeposit({
+        walletClient,
+        tokenAddress,
+        poolAddress,
+        tokenDecimals,
+        amountStr: humanAmount,
+      });
+      toast.success('[deposit:uint] tx sent');
+      return hash;
     });
   };
 
   const borrow = async (humanAmount: string) => {
     return withBusy('borrow', async () => {
       if (!address) throw new Error('Connect wallet');
-      
-      // Ensure relayer is available before proceeding
-      const isHealthy = await relayerHealthy();
-      if (!isHealthy) {
-        throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
-      }
-      
-      const pool = await getPool();
-      const decimals = await getTokenDecimals();
-      const u64 = toU64Units(humanAmount, decimals);
-      
-      // Encrypt the amount for the borrow call
-      const enc = await encryptU64(u64);
-      
-      // Call borrow function with encrypted amount
-      const tx = await pool.borrow(enc);
-      toast.success('Borrow submitted');
-      await tx.wait();
-      toast.success('Borrow confirmed');
+      if (!walletClient) throw new Error('Wallet not ready');
+
+      const tokenDecimals = await getTokenDecimals();
+      const poolAddress = POOL_ADDR as `0x${string}`;
+
+      const hash = await handleBorrow({
+        walletClient,
+        poolAddress,
+        tokenDecimals,
+        amountStr: humanAmount,
+      });
+      toast.success('[borrow:uint] tx sent');
+      return hash;
     });
   };
 
   const repay = async (humanAmount: string) => {
     return withBusy('repay', async () => {
       if (!address) throw new Error('Connect wallet');
-      
-      // Ensure relayer is available before proceeding
-      const isHealthy = await relayerHealthy();
-      if (!isHealthy) {
-        throw new Error('Relayer unavailable. Check your connection and relayer configuration.');
-      }
-      
-      const pool = await getPool();
-      const decimals = await getTokenDecimals();
-      const u64 = toU64Units(humanAmount, decimals);
-      
-      // Encrypt the amount for the repay call
-      const enc = await encryptU64(u64);
-      
-      // Call repay function with encrypted amount
-      const tx = await pool.repay(enc);
-      toast.success('Repay submitted');
-      await tx.wait();
-      toast.success('Repay confirmed');
+      if (!walletClient) throw new Error('Wallet not ready');
+
+      const tokenDecimals = await getTokenDecimals();
+      const tokenAddress = TOKEN_ADDR as `0x${string}`;
+      const poolAddress = POOL_ADDR as `0x${string}`;
+
+      const hash = await handleRepay({
+        walletClient,
+        tokenAddress,
+        poolAddress,
+        tokenDecimals,
+        amountStr: humanAmount,
+      });
+      toast.success('[repay:uint] tx sent');
+      return hash;
     });
   };
 

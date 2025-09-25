@@ -14,11 +14,14 @@
     "deploy:sepolia": "pnpm -C contracts deploy:sepolia",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
-    "e2e:headed": "playwright test --headed"
+    "e2e:headed": "playwright test --headed",
+    "smoke:ui": "tsx app/scripts/smoke-ui.ts",
+    "smoke:abi": "tsx tests/abi-smoke-test.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^20.0.0",
+    "tsx": "^4.20.5",
     "typescript": "^5.0.0"
   },
   "engines": {
