@@ -16,7 +16,8 @@
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
     "smoke:ui": "tsx app/scripts/smoke-ui.ts",
-    "smoke:abi": "tsx tests/abi-smoke-test.ts"
+    "smoke:abi": "tsx tests/abi-smoke-test.ts",
+    "ci:check": "pnpm -C app build"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
