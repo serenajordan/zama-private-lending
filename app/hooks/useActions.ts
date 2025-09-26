@@ -157,7 +157,6 @@ export function useActions() {
         return hash;
       }
 
-<<<<<<< HEAD
       throw new Error('No supported faucet function found (uint or bytes)');
     });
   };
