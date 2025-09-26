@@ -170,8 +170,16 @@ export function Dashboard() {
   }
   const disabled = !isConnected
 
+  // Gate relayer health checks behind env flag
+  const RELAYER_HEALTH_ENABLED = (process.env.NEXT_PUBLIC_RELAYER_HEALTH || 'on').toLowerCase() !== 'off';
+
   // Health check on load
   useEffect(() => {
+    if (!RELAYER_HEALTH_ENABLED) {
+      console.log("[relayer] health checks disabled via NEXT_PUBLIC_RELAYER_HEALTH=off");
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       console.log("[relayer] checking health...");
@@ -185,7 +193,7 @@ export function Dashboard() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [RELAYER_HEALTH_ENABLED]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
